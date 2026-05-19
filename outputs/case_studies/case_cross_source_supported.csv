@@ -1,0 +1,31 @@
+﻿edge_id,subject_org_id,object_org_id,event_month,relation_type,subject_name,object_name,event_count,source_datasets,icews_event_count,gdelt_event_count,confidence,status
+E_000065931,ORG_009828,ORG_000410,2023-01,material_conflict,Rioter (Mozambique),Police (Mozambique),10,ICEWS;GDELT,1,9,1.0,active
+E_000000002,ORG_000001,ORG_000002,2023-02,material_conflict,United States,United Kingdom,17,ICEWS;GDELT,5,12,1.0,active
+E_000000004,ORG_000001,ORG_000002,2023-02,verbal_conflict,United States,United Kingdom,13,ICEWS;GDELT,1,12,1.0,active
+E_000000009,ORG_000001,ORG_000003,2023-01,verbal_conflict,United States,Government (China),109,ICEWS;GDELT,4,105,1.0,active
+E_000000010,ORG_000001,ORG_000003,2023-02,material_conflict,United States,Government (Peru),16,ICEWS;GDELT,4,12,1.0,active
+E_000000012,ORG_000001,ORG_000003,2023-02,verbal_conflict,United States,Government (Myanmar),24,ICEWS;GDELT,5,19,1.0,active
+E_000000018,ORG_000001,ORG_000009,2023-01,material_conflict,United States,Business (Russia),56,ICEWS;GDELT,5,51,1.0,active
+E_000000019,ORG_000001,ORG_000009,2023-01,verbal_conflict,United States,Business (China),49,ICEWS;GDELT,1,48,1.0,active
+E_000000020,ORG_000001,ORG_000009,2023-02,material_conflict,United States,Business (Iran),23,ICEWS;GDELT,12,11,1.0,active
+E_000000021,ORG_000001,ORG_000009,2023-02,verbal_conflict,United States,Business (China),16,ICEWS;GDELT,7,9,1.0,active
+E_000000026,ORG_000001,ORG_000011,2023-01,material_conflict,United States,Military (Iraq),55,ICEWS;GDELT,3,52,1.0,active
+E_000000028,ORG_000001,ORG_000011,2023-01,verbal_conflict,United States,Military (Eritrea),39,ICEWS;GDELT,8,31,1.0,active
+E_000000029,ORG_000001,ORG_000011,2023-02,material_conflict,United States,Military (Myanmar),10,ICEWS;GDELT,1,9,1.0,active
+E_000000031,ORG_000001,ORG_000011,2023-02,verbal_conflict,United States,Military (Philippines),14,ICEWS;GDELT,5,9,1.0,active
+E_000060299,ORG_004933,ORG_000366,2023-01,verbal_conflict,Presidential Candidate (Nigeria),Atiku Abubakar,7,ICEWS;GDELT,1,6,1.0,active
+E_000059535,ORG_004701,ORG_000003,2023-02,material_conflict,House Speaker (Jordan),Government (Jordan),5,ICEWS;GDELT,1,4,1.0,active
+E_000057509,ORG_003977,ORG_000410,2023-01,verbal_conflict,Protester (Brazil),Police (Brazil),86,ICEWS;GDELT,1,85,1.0,active
+E_000057507,ORG_003977,ORG_000410,2023-01,material_conflict,Protester (Hong Kong),Police (Hong Kong),300,ICEWS;GDELT,233,67,1.0,active
+E_000057503,ORG_003977,ORG_000399,2023-01,verbal_conflict,Protester (Peru),Peru,25,ICEWS;GDELT,1,24,1.0,active
+E_000057501,ORG_003977,ORG_000399,2023-01,material_conflict,Protester (Peru),Peru,29,ICEWS;GDELT,17,12,1.0,active
+E_000000153,ORG_000001,ORG_000089,2023-01,material_conflict,United States,Japan,16,ICEWS;GDELT,1,15,1.0,active
+E_000000150,ORG_000001,ORG_000087,2023-01,verbal_conflict,United States,France,14,ICEWS;GDELT,1,13,1.0,active
+E_000000148,ORG_000001,ORG_000087,2023-01,material_conflict,United States,France,28,ICEWS;GDELT,1,27,1.0,active
+E_000000135,ORG_000001,ORG_000071,2023-01,verbal_conflict,United States,Australia,7,ICEWS;GDELT,1,6,1.0,active
+E_000000128,ORG_000001,ORG_000060,2023-01,material_conflict,United States,Canada,49,ICEWS;GDELT,2,47,1.0,active
+E_000000119,ORG_000001,ORG_000056,2023-02,material_conflict,United States,Pakistan,7,ICEWS;GDELT,1,6,1.0,active
+E_000000085,ORG_000001,ORG_000038,2023-02,verbal_conflict,United States,Israel,33,ICEWS;GDELT,13,20,1.0,active
+E_000057496,ORG_003977,ORG_000364,2023-01,verbal_conflict,Protester (Peru),Congress (Peru),20,ICEWS;GDELT,1,19,1.0,active
+E_000057495,ORG_003977,ORG_000364,2023-01,material_conflict,Protester (Brazil),Congress (Brazil),26,ICEWS;GDELT,11,15,1.0,active
+E_000057478,ORG_003977,ORG_000167,2023-01,verbal_conflict,Protester (Brazil),Brazil,12,ICEWS;GDELT,3,9,1.0,active

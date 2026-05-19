@@ -1,0 +1,91 @@
+你现在需要为一个多源组织机构关系图谱生成候选时序约束。
+
+项目背景：
+- 数据来自 ICEWS 与 GDELT。
+- 数据时间范围主要为 2023 年 1 月至 4 月。
+- 原始数据是离散事件，已经按月聚合为组织关系区间。
+- 这些关系是派生关系，不是原始事件本身。
+- 后续会结合 PaTeCon 挖掘出的数据约束，筛选最终校验规则。
+- 约束用于校验不合理派生关系，但不能误删原始事件证据。
+
+关系类型列表：
+- material_conflict: 实质冲突，例如制裁、军事攻击、逮捕、封锁、武装冲突。
+- material_cooperation: 实质合作，例如援助、经济合作、军事合作、实际行动支持、提供资源。
+- mixed_relation: 混合关系，表示同一时间窗口内存在多种关系并存，不宜简单判定为单一关系。
+- verbal_conflict: 言语冲突，例如批评、谴责、威胁、外交抗议、表达不满。
+- verbal_cooperation: 言语合作，例如声明支持、表达合作意愿、外交沟通、协商、赞同。
+
+图谱统计信息：
+关系边数量: 309751
+月度关系区间数量: 140818
+来源分布: {'GDELT': 241310, 'ICEWS': 66715, 'ICEWS;GDELT': 1726}
+关系类型分布: {'verbal_cooperation': 133907, 'verbal_conflict': 56478, 'material_conflict': 52367, 'material_cooperation': 33739, 'mixed_relation': 33260}
+置信度等级分布: {'low': 225107, 'medium': 78884, 'high': 5760}
+
+月度关系样例：
+ORG_000276 mixed_relation ORG_000051 2023-02-01 2023-02-28
+ORG_001293 verbal_conflict ORG_000050 2023-01-01 2023-01-31
+ORG_000394 mixed_relation ORG_000002 2023-01-01 2023-01-31
+ORG_000066 verbal_cooperation ORG_000093 2023-01-01 2023-01-31
+ORG_000021 verbal_cooperation ORG_000029 2023-01-01 2023-01-31
+ORG_000113 mixed_relation ORG_000175 2023-01-01 2023-01-31
+ORG_000410 material_conflict ORG_000636 2023-01-01 2023-01-31
+ORG_002090 mixed_relation ORG_000812 2023-02-01 2023-02-28
+ORG_000299 mixed_relation ORG_000049 2023-01-01 2023-01-31
+ORG_003977 verbal_conflict ORG_000169 2023-03-01 2023-03-31
+ORG_000668 verbal_cooperation ORG_001314 2023-01-01 2023-01-31
+ORG_000056 verbal_cooperation ORG_001578 2023-01-01 2023-01-31
+ORG_000894 verbal_conflict ORG_001804 2023-01-01 2023-01-31
+ORG_000082 verbal_cooperation ORG_000008 2023-01-01 2023-01-31
+ORG_004412 verbal_conflict ORG_000003 2023-02-01 2023-02-28
+ORG_000044 verbal_cooperation ORG_001372 2023-01-01 2023-01-31
+ORG_002612 mixed_relation ORG_000740 2023-03-01 2023-03-31
+ORG_007986 material_conflict ORG_000894 2023-02-01 2023-02-28
+ORG_000771 verbal_cooperation ORG_000962 2023-01-01 2023-01-31
+ORG_000002 material_conflict ORG_001003 2023-01-01 2023-01-31
+ORG_000098 verbal_cooperation ORG_000089 2023-01-01 2023-01-31
+ORG_000167 verbal_cooperation ORG_000028 2023-01-01 2023-01-31
+ORG_000048 mixed_relation ORG_000194 2023-03-01 2023-03-31
+ORG_000160 material_conflict ORG_000093 2023-01-01 2023-01-31
+ORG_000014 verbal_cooperation ORG_000102 2023-02-01 2023-02-28
+ORG_006334 verbal_cooperation ORG_000041 2023-01-01 2023-01-31
+ORG_000020 verbal_cooperation ORG_000748 2023-02-01 2023-02-28
+ORG_000191 verbal_cooperation ORG_000018 2023-01-01 2023-01-31
+ORG_000295 verbal_conflict ORG_002774 2023-01-01 2023-01-31
+ORG_001993 verbal_conflict ORG_000167 2023-03-01 2023-03-31
+
+请你生成候选时序约束，输出 JSON 数组。
+每个元素必须包含以下字段：
+
+{
+  "constraint_name": "",
+  "relation_a": "",
+  "relation_b": "",
+  "temporal_predicate": "",
+  "hard_or_soft": "",
+  "expected_action": "",
+  "reason": ""
+}
+
+字段含义：
+- constraint_name: 约束名称，使用英文小写和下划线。
+- relation_a: 第一个关系类型，例如 verbal_conflict。
+- relation_b: 第二个关系类型。如果只涉及单个关系，可填 none 或 any。
+- temporal_predicate: 时序谓词，例如 same_month_same_subject_object、before、after、overlap、cross_source_supported、gdelt_single_source_low_event_count。
+- hard_or_soft: 只能填 hard 或 soft。除非非常确定，否则优先 soft。
+- expected_action: 触发约束后的建议动作，例如 keep、review、downgrade、hide、mark_mixed、mark_mixed_or_downgrade。
+- reason: 中文解释，说明为什么该约束合理。
+
+生成要求：
+1. 必须只输出 JSON 数组。
+2. 不要输出 Markdown。
+3. 不要使用 ```json 代码块。
+4. 不要输出额外解释。
+5. 不要生成过于绝对的约束。
+6. 现实组织关系可能同时存在合作和冲突，不能简单互斥。
+7. verbal_conflict 与 material_conflict 可以存在升级关系，但不能认为一定冲突。
+8. material_cooperation 与 material_conflict 如果同月同对象并存，通常应标记为 mixed_relation 或降权复核。
+9. GDELT 单源低证据关系更适合 hide 或 downgrade。
+10. ICEWS 和 GDELT 共同支持的关系一般不直接删除。
+11. hard 约束数量应少，soft 约束数量可以多。
+12. 建议生成 6 到 12 条候选约束。
