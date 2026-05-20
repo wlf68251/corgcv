@@ -32,6 +32,11 @@
     confidence
     status
 
+说明：
+    本脚本不输出 event_code / event_codes。
+    EventCode / EventRootCode 只用于在 06 中正确映射 relation_type。
+    如果后续需要为 PaTeCon 使用 CAMEO 顶层码，应在 08_build_intervals.py 中处理。
+
 运行：
     python ./06_stream_fuse_gdelt.py
 """
@@ -58,7 +63,7 @@ STREAM_UPDATE_LOG_PATH = OUT_DIR / "stream_update_log.csv"
 CHUNKSIZE = 200000
 
 # GDELT 单源新增边过滤阈值
-# 目的：避免把大量只出现 1 次的低证据 GDELT 边全部写入后续流程
+# 避免把只出现 1 次的低证据 GDELT 边全部写入后续流程
 MIN_GDELT_ONLY_EVENT_COUNT = 3
 
 
@@ -99,6 +104,95 @@ def normalize_name(name):
     return name.strip()
 
 
+def normalize_event_code(code):
+    """
+    标准化 GDELT / ICEWS 事件码为纯数字字符串。
+
+    这里只用于 relation_type 映射，不输出到 CSV。
+
+    例：
+        "4"    -> "4"
+        "40"   -> "40"
+        "040"  -> "040"
+        "73"   -> "73"
+        "073"  -> "073"
+        "10"   -> "10"
+        "100"  -> "100"
+        "120"  -> "120"
+        "51.0" -> "51"
+    """
+    if code is None or pd.isna(code):
+        return ""
+
+    text = str(code).strip()
+
+    if not text:
+        return ""
+
+    if "." in text:
+        text = text.split(".")[0]
+
+    text = re.sub(r"\D", "", text)
+
+    return text
+
+
+def get_cameo_top2(code):
+    """
+    从 EventCode / EventRootCode 中提取两位 CAMEO 顶层码。
+
+    适配 GDELT 常见情况：
+        EventRootCode:
+            1  -> 01
+            4  -> 04
+            7  -> 07
+            10 -> 10
+            19 -> 19
+
+        EventCode:
+            40  -> 04
+            73  -> 07
+            100 -> 10
+            120 -> 12
+            190 -> 19
+            020 -> 02
+            051 -> 05
+    """
+    text = normalize_event_code(code)
+
+    if not text:
+        return ""
+
+    # EventRootCode 通常是 1~20
+    if len(text) <= 2:
+        n = safe_int(text, default=-1)
+
+        if 1 <= n <= 20:
+            return f"{n:02d}"
+
+        # 例如 40、73 这类虽然是两位，但其实是 EventCode
+        # 40 -> 04, 73 -> 07
+        first = safe_int(text[0], default=-1)
+        if 1 <= first <= 9:
+            return f"{first:02d}"
+
+        return ""
+
+    # 三位及以上 EventCode：
+    # 020 -> 02
+    # 051 -> 05
+    # 100 -> 10
+    # 120 -> 12
+    # 190 -> 19
+    top = text[:2]
+    n = safe_int(top, default=-1)
+
+    if 1 <= n <= 20:
+        return f"{n:02d}"
+
+    return ""
+
+
 def sql_date_to_month(sql_date):
     """
     GDELT SQLDATE:
@@ -127,14 +221,46 @@ def sql_date_to_day(sql_date):
 
 def map_gdelt_relation_type(row):
     """
-    使用 GDELT QuadClass 映射为粗粒度组织关系类型。
+    将 GDELT 事件映射为原来的粗粒度 relation_type。
 
-    QuadClass:
-        1 = verbal_cooperation
-        2 = material_cooperation
-        3 = verbal_conflict
-        4 = material_conflict
+    优先级：
+        1. EventRootCode
+        2. EventCode
+        3. QuadClass 兜底
+
+    输出仍然保持原有类型：
+        verbal_cooperation
+        material_cooperation
+        verbal_conflict
+        material_conflict
+        mixed_relation
+
+    注意：
+        本函数不输出 CAMEO_01 ~ CAMEO_20。
+        PaTeCon 所需 CAMEO 顶层码应在 08 中转换。
     """
+
+    # 1. 优先使用 EventRootCode
+    root = get_cameo_top2(row.get("EventRootCode", ""))
+
+    # 2. 如果 EventRootCode 无法识别，再从 EventCode 推导
+    if not root:
+        root = get_cameo_top2(row.get("EventCode", ""))
+
+    # 3. 根据 CAMEO 顶层码映射为粗粒度关系
+    if root in {"01", "02", "03", "04", "05"}:
+        return "verbal_cooperation"
+
+    if root in {"06", "07", "08"}:
+        return "material_cooperation"
+
+    if root in {"09", "10", "11", "12", "13"}:
+        return "verbal_conflict"
+
+    if root in {"14", "15", "16", "17", "18", "19", "20"}:
+        return "material_conflict"
+
+    # 4. CAMEO 无法识别时，用 QuadClass 兜底
     quad = safe_int(row.get("QuadClass", ""), default=0)
 
     if quad == 1:
@@ -144,17 +270,6 @@ def map_gdelt_relation_type(row):
     if quad == 3:
         return "verbal_conflict"
     if quad == 4:
-        return "material_conflict"
-
-    root = safe_str(row.get("EventRootCode", ""))
-
-    if root in {"01", "02", "03", "04", "05"}:
-        return "verbal_cooperation"
-    if root in {"06", "07", "08", "09"}:
-        return "material_cooperation"
-    if root in {"10", "11", "12", "13"}:
-        return "verbal_conflict"
-    if root in {"14", "15", "16", "17", "18", "19", "20"}:
         return "material_conflict"
 
     return "mixed_relation"
@@ -244,7 +359,7 @@ def load_seed_edges():
     """
     加载 relation_edges_seed.csv。
 
-    这个函数严格按照 05 当前输出字段读取：
+    该函数严格按照 05 当前输出字段读取：
 
         edge_id
         subject_org_id
@@ -259,6 +374,10 @@ def load_seed_edges():
         gdelt_event_count
         confidence
         status
+
+    注意：
+        这里不读取 event_code / event_codes。
+        06 不改变输出列。
     """
     if not SEED_GRAPH_PATH.exists():
         raise FileNotFoundError(f"relation_edges_seed.csv 不存在: {SEED_GRAPH_PATH}")
@@ -342,8 +461,7 @@ def create_gdelt_edge(subject_org, object_org, event_month, relation_type):
     """
     新建 GDELT 单源边。
 
-    注意：
-        confidence 只是初始值，后续 07 会重新计算。
+    confidence 只是初始值，后续 07 会重新计算。
     """
     return {
         "subject_org_id": subject_org["org_id"],
@@ -364,12 +482,19 @@ def create_gdelt_edge(subject_org, object_org, event_month, relation_type):
 
 
 def add_gdelt_to_edge(edge):
+    """
+    将一条 GDELT 事件证据加入关系边。
+
+    注意：
+        这里不保存 EventCode。
+        EventCode 只在 map_gdelt_relation_type() 中用于生成 relation_type。
+    """
     edge["event_count"] += 1
     edge["gdelt_event_count"] += 1
     edge["source_datasets"].add("GDELT")
 
     # 如果是 ICEWS + GDELT 跨源支持，给一个临时较高初始值
-    # 后续 07 会重新计算最终 confidence
+    # 后续 07_score_relations.py 会重新计算最终 confidence
     if "ICEWS" in edge["source_datasets"] and "GDELT" in edge["source_datasets"]:
         edge["confidence"] = max(edge["confidence"], 0.7)
 

@@ -30,6 +30,13 @@ def clean_name(name):
     name = re.sub(r"^THE\s+", "", name)
     return name
 
+def join_unique_codes(series):
+    values = []
+    for x in series:
+        x = str(x).strip()
+        if x and x.lower() != "nan":
+            values.append(x)
+    return ";".join(sorted(set(values)))
 
 def pick_col(df, candidates):
     lower_map = {c.lower(): c for c in df.columns}
@@ -40,6 +47,62 @@ def pick_col(df, candidates):
             return lower_map[c.lower()]
     return None
 
+def normalize_cameo_code(code):
+    """
+    保留 CAMEO 原始语义，修复 pandas 可能造成的前导零丢失。
+
+    例：
+        10   -> 010
+        20   -> 020
+        40   -> 040
+        51   -> 051
+        100  -> 100
+        120  -> 120
+        010  -> 010
+    """
+    if code is None or pd.isna(code):
+        return ""
+
+    text = str(code).strip()
+
+    if not text:
+        return ""
+
+    if "." in text:
+        text = text.split(".")[0]
+
+    text = re.sub(r"\D", "", text)
+
+    if not text:
+        return ""
+
+    if len(text) == 1:
+        return text.zfill(3)
+
+    if len(text) == 2:
+        return text.zfill(3)
+
+    return text
+
+
+def get_cameo_root_code(code):
+    """
+    从标准化后的 CAMEO 码中取顶层两位码。
+
+    例：
+        010 -> 01
+        020 -> 02
+        051 -> 05
+        100 -> 10
+        120 -> 12
+        190 -> 19
+    """
+    code = normalize_cameo_code(code)
+
+    if len(code) < 2:
+        return ""
+
+    return code[:2]
 
 def map_relation_type(cameo_code=None, quad_class=None):
     """
@@ -131,7 +194,12 @@ def main():
 
     print("开始构建 ICEWS 统一事件表...")
 
-    for chunk in pd.read_csv(RAW_ICEWS, chunksize=CHUNKSIZE, low_memory=False):
+    for chunk in pd.read_csv(
+        RAW_ICEWS,
+        chunksize=CHUNKSIZE,
+        low_memory=False,
+        dtype=str
+    ):
         source_col = pick_col(chunk, ["source_name", "Source Name", "SourceName", "Source Actor", "Source"])
         target_col = pick_col(chunk, ["target_name", "Target Name", "TargetName", "Target Actor", "Target"])
         date_col = pick_col(chunk, ["event_date", "Event Date", "EventDate", "Date"])
@@ -167,7 +235,10 @@ def main():
                 continue
 
             event_date = row[date_col]
-            cameo_code = row.get(cameo_col, "") if cameo_col else ""
+            raw_cameo_code = row.get(cameo_col, "") if cameo_col else ""
+            cameo_code = normalize_cameo_code(raw_cameo_code)
+            event_root_code = get_cameo_root_code(cameo_code)
+
             relation_type = map_relation_type(cameo_code=cameo_code)
 
             location_parts = []
@@ -187,7 +258,6 @@ def main():
                 "object_org_id": object_org_id,
                 "object_name": target_name,
                 "event_code": cameo_code,
-                "event_root_code": str(cameo_code)[:2] if cameo_code else "",
                 "event_date": event_date.strftime("%Y-%m-%d"),
                 "event_month": event_date.strftime("%Y-%m"),
                 "location": location,
@@ -243,7 +313,7 @@ def main():
 
     print("开始构建 ICEWS 种子图谱...")
 
-    events = pd.read_csv(EVENT_FACTS_REL_OUT, low_memory=False)
+    events = pd.read_csv(EVENT_FACTS_REL_OUT, low_memory=False, dtype=str).fillna("")
 
     # 每条事件转为一条图谱边
     seed_graph = events[
@@ -276,7 +346,8 @@ def main():
     ).agg(
         subject_name=("subject_name", "first"),
         object_name=("object_name", "first"),
-        event_count=("fact_id", "count")
+        event_count=("fact_id", "count"),
+        event_codes=("event_code", join_unique_codes)
     )
 
     relation_edges.insert(
