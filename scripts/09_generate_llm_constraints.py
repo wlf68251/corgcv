@@ -1,479 +1,322 @@
 # scripts/09_generate_llm_constraints.py
 import os
-import re
 import json
+from pathlib import Path
+
 import pandas as pd
-from openai import OpenAI
-
-PROCESSED_DIR = "../data/processed"
-
-EDGES_FILE = os.path.join(PROCESSED_DIR, "relation_edges_scored.csv")
-INTERVALS_FILE = os.path.join(PROCESSED_DIR, "org_relation_intervals.tsv")
-
-LLM_PROMPT_OUT = os.path.join(PROCESSED_DIR, "llm_constraint_prompt.txt")
-LLM_RAW_RESPONSE_OUT = os.path.join(PROCESSED_DIR, "llm_raw_response.txt")
-LLM_JSON_OUT = os.path.join(PROCESSED_DIR, "llm_constraints.json")
-LLM_CSV_OUT = os.path.join(PROCESSED_DIR, "temporal_constraints_llm.csv")
-
-# =========================
-# DashScope OpenAI 兼容接口配置
-# =========================
-# 不建议把真实 Key 写死在代码里。
-# 推荐在终端中设置环境变量：
-# export DASHSCOPE_API_KEY="你的apikey"
-#
-# 如果你只是本地测试，也可以临时取消下面这一行注释并填入 Key：
-# DASHSCOPE_API_KEY = ""
-
-# DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-DASHSCOPE_API_KEY = "sk-58624b939f654783bc6f7e909a76c8fa"
-
-BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = "qwen-turbo"
-
-BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = "qwen-turbo"
-
-# 如果 LLM 调用失败，是否使用默认约束兜底，防止流程中断
-USE_DEFAULT_CONSTRAINTS_WHEN_FAILED = True
 
 
-RELATION_TYPE_DESCRIPTIONS = {
-    "verbal_cooperation": "言语合作，例如声明支持、表达合作意愿、外交沟通、协商、赞同。",
-    "material_cooperation": "实质合作，例如援助、经济合作、军事合作、实际行动支持、提供资源。",
-    "verbal_conflict": "言语冲突，例如批评、谴责、威胁、外交抗议、表达不满。",
-    "material_conflict": "实质冲突，例如制裁、军事攻击、逮捕、封锁、武装冲突。",
-    "mixed_relation": "混合关系，表示同一时间窗口内存在多种关系并存，不宜简单判定为单一关系。"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+
+INTERVAL_FILE = PROCESSED_DIR / "org_relation_intervals.tsv"
+
+PROMPT_OUT = PROCESSED_DIR / "llm_constraint_prompt.txt"
+RAW_RESPONSE_OUT = PROCESSED_DIR / "llm_raw_response.txt"
+
+LLM_JSON_OUT = PROCESSED_DIR / "llm_constraints.json"
+LLM_CSV_OUT = PROCESSED_DIR / "temporal_constraints_llm.csv"
+
+
+CAMEO_TOP_LEVEL_DESC = {
+    "01": "Make public statement / 公开表态",
+    "02": "Appeal / 呼吁、请求",
+    "03": "Express intent to cooperate / 表达合作意向",
+    "04": "Consult / 磋商、会谈",
+    "05": "Engage in diplomatic cooperation / 外交合作",
+    "06": "Engage in material cooperation / 物质合作",
+    "07": "Provide aid / 提供援助",
+    "08": "Yield / 让步",
+    "09": "Investigate / 调查",
+    "10": "Demand / 要求",
+    "11": "Disapprove / 反对、不满",
+    "12": "Reject / 拒绝",
+    "13": "Threaten / 威胁",
+    "14": "Protest / 抗议",
+    "15": "Exhibit force posture / 展示武力姿态",
+    "16": "Reduce relations / 降低关系",
+    "17": "Coerce / 胁迫",
+    "18": "Assault / 攻击",
+    "19": "Fight / 战斗",
+    "20": "Use unconventional mass violence / 非常规大规模暴力",
 }
 
 
-REQUIRED_FIELDS = [
-    "constraint_name",
-    "relation_a",
-    "relation_b",
-    "temporal_predicate",
-    "hard_or_soft",
-    "expected_action",
-    "reason"
+DEFAULT_CONSTRAINTS = [
+    {
+        "constraint_name": "threat_before_assault",
+        "relation_a": "13",
+        "relation_b": "18",
+        "temporal_predicate": "before",
+        "hard_or_soft": "soft",
+        "expected_action": "review_or_downgrade",
+        "reason": "Threatening events may precede assault events, but the rule should remain soft because real political processes are noisy."
+    },
+    {
+        "constraint_name": "demand_before_reject",
+        "relation_a": "10",
+        "relation_b": "12",
+        "temporal_predicate": "before",
+        "hard_or_soft": "soft",
+        "expected_action": "review",
+        "reason": "Demands are often followed by rejection, but event reports may be incomplete or reversed in time."
+    },
+    {
+        "constraint_name": "cooperation_conflict_review",
+        "relation_a": "05",
+        "relation_b": "18",
+        "temporal_predicate": "disjoint_or_review",
+        "hard_or_soft": "soft",
+        "expected_action": "mark_mixed_or_review",
+        "reason": "Diplomatic cooperation and assault between the same organizations in the same month may indicate mixed or complex relations rather than direct deletion."
+    },
+    {
+        "constraint_name": "aid_before_yield",
+        "relation_a": "07",
+        "relation_b": "08",
+        "temporal_predicate": "before",
+        "hard_or_soft": "soft",
+        "expected_action": "review",
+        "reason": "Aid may be associated with later yielding behavior, but the rule is not deterministic."
+    },
+    {
+        "constraint_name": "protest_before_coerce",
+        "relation_a": "14",
+        "relation_b": "17",
+        "temporal_predicate": "before",
+        "hard_or_soft": "soft",
+        "expected_action": "review_or_downgrade",
+        "reason": "Protest may precede coercive responses, but this should only be used as a weak temporal signal."
+    }
 ]
 
 
-def load_intervals():
-    """
-    读取 PaTeCon 使用的月度关系区间。
-    格式：
-    subject property object start_time end_time
-    """
+def read_interval_sample():
+    if not INTERVAL_FILE.exists():
+        return pd.DataFrame(columns=["subject", "property", "object", "start_time", "end_time"])
 
-    if not os.path.exists(INTERVALS_FILE):
-        print(f"未找到月度关系区间文件: {INTERVALS_FILE}")
-        return pd.DataFrame(
-            columns=["subject", "property", "object", "start_time", "end_time"]
-        )
-
-    intervals = pd.read_csv(
-        INTERVALS_FILE,
+    df = pd.read_csv(
+        INTERVAL_FILE,
         sep="\t",
         header=None,
         names=["subject", "property", "object", "start_time", "end_time"],
-        low_memory=False
-    )
+        dtype=str
+    ).fillna("")
 
-    return intervals
-
-
-def build_stats_text(edges, intervals):
-    """
-    构造图谱统计信息，作为 LLM 生成约束的依据。
-    """
-
-    total_edges = len(edges)
-    total_intervals = len(intervals)
-
-    source_stats = {}
-    relation_stats = {}
-    confidence_stats = {}
-
-    if "source_datasets" in edges.columns:
-        source_stats = edges["source_datasets"].fillna("").value_counts().to_dict()
-
-    if "relation_type" in edges.columns:
-        relation_stats = edges["relation_type"].fillna("").value_counts().to_dict()
-
-    if "confidence_level" in edges.columns:
-        confidence_stats = edges["confidence_level"].fillna("").value_counts().to_dict()
-
-    stats_text = f"""
-关系边数量: {total_edges}
-月度关系区间数量: {total_intervals}
-来源分布: {source_stats}
-关系类型分布: {relation_stats}
-置信度等级分布: {confidence_stats}
-""".strip()
-
-    return stats_text
+    return df
 
 
-def build_prompt(relation_types, samples, stats_text):
-    """
-    构造给 LLM 的提示词。
-    """
+def build_prompt(df):
+    relation_counts = {}
 
-    relation_type_text = "\n".join([
-        f"- {r}: {RELATION_TYPE_DESCRIPTIONS.get(r, '无说明')}"
-        for r in relation_types
-    ])
+    if not df.empty and "property" in df.columns:
+        relation_counts = df["property"].value_counts().to_dict()
 
-    if samples.empty:
-        sample_text = "当前没有可用月度关系样例。"
-    else:
-        sample_lines = []
-        for _, row in samples.iterrows():
+    relation_desc_lines = []
+    for code, desc in CAMEO_TOP_LEVEL_DESC.items():
+        count = relation_counts.get(code, 0)
+        relation_desc_lines.append(f"- {code}: {desc}; interval_count={count}")
+
+    sample_lines = []
+
+    if not df.empty:
+        sample = df.head(50)
+        for _, row in sample.iterrows():
             sample_lines.append(
                 f"{row['subject']} {row['property']} {row['object']} "
                 f"{row['start_time']} {row['end_time']}"
             )
-        sample_text = "\n".join(sample_lines)
 
     prompt = f"""
-你现在需要为一个多源组织机构关系图谱生成候选时序约束。
+你是一个知识图谱时序约束分析助手。
 
-项目背景：
-- 数据来自 ICEWS 与 GDELT。
-- 数据时间范围主要为 2023 年 1 月至 4 月。
-- 原始数据是离散事件，已经按月聚合为组织关系区间。
-- 这些关系是派生关系，不是原始事件本身。
-- 后续会结合 PaTeCon 挖掘出的数据约束，筛选最终校验规则。
-- 约束用于校验不合理派生关系，但不能误删原始事件证据。
+当前任务：
+根据组织机构关系图谱中的 CAMEO 顶层事件类型，生成候选时序约束。
 
-关系类型列表：
-{relation_type_text}
+重要说明：
+1. 当前 relation_type 已经使用 CAMEO 顶层码，不使用 verbal_cooperation 等粗粒度类型。
+2. 关系类型是两位字符串：01, 02, ..., 20。
+3. 不要输出 CAMEO_01，直接输出 01。
+4. 这些约束主要用于辅助图谱校验，不应过于绝对。
+5. 优先生成 soft constraint，避免误删真实复杂关系。
+6. 对于同一组织对同一月份出现多种关系，应优先考虑 mixed/review，而不是直接删除。
 
-图谱统计信息：
-{stats_text}
+CAMEO 顶层关系类型：
+{chr(10).join(relation_desc_lines)}
 
-月度关系样例：
-{sample_text}
+样例区间：
+{chr(10).join(sample_lines)}
 
-请你生成候选时序约束，输出 JSON 数组。
-每个元素必须包含以下字段：
+请输出 JSON 数组，每个元素格式如下：
+[
+  {{
+    "constraint_name": "",
+    "relation_a": "13",
+    "relation_b": "18",
+    "temporal_predicate": "before/disjoint/include/overlap/review",
+    "hard_or_soft": "soft",
+    "expected_action": "review/downgrade/hide/mark_mixed",
+    "reason": ""
+  }}
+]
 
-{{
-  "constraint_name": "",
-  "relation_a": "",
-  "relation_b": "",
-  "temporal_predicate": "",
-  "hard_or_soft": "",
-  "expected_action": "",
-  "reason": ""
-}}
-
-字段含义：
-- constraint_name: 约束名称，使用英文小写和下划线。
-- relation_a: 第一个关系类型，例如 verbal_conflict。
-- relation_b: 第二个关系类型。如果只涉及单个关系，可填 none 或 any。
-- temporal_predicate: 时序谓词，例如 same_month_same_subject_object、before、after、overlap、cross_source_supported、gdelt_single_source_low_event_count。
-- hard_or_soft: 只能填 hard 或 soft。除非非常确定，否则优先 soft。
-- expected_action: 触发约束后的建议动作，例如 keep、review、downgrade、hide、mark_mixed、mark_mixed_or_downgrade。
-- reason: 中文解释，说明为什么该约束合理。
-
-生成要求：
-1. 必须只输出 JSON 数组。
-2. 不要输出 Markdown。
-3. 不要使用 ```json 代码块。
-4. 不要输出额外解释。
-5. 不要生成过于绝对的约束。
-6. 现实组织关系可能同时存在合作和冲突，不能简单互斥。
-7. verbal_conflict 与 material_conflict 可以存在升级关系，但不能认为一定冲突。
-8. material_cooperation 与 material_conflict 如果同月同对象并存，通常应标记为 mixed_relation 或降权复核。
-9. GDELT 单源低证据关系更适合 hide 或 downgrade。
-10. ICEWS 和 GDELT 共同支持的关系一般不直接删除。
-11. hard 约束数量应少，soft 约束数量可以多。
-12. 建议生成 6 到 12 条候选约束。
-""".strip()
-
-    return prompt
+要求：
+- relation_a 和 relation_b 必须是 01~20 的两位字符串。
+- 不要添加 CAMEO_ 前缀。
+- 不要生成过强硬的删除规则。
+- 如果语义上不确定，请设置 hard_or_soft 为 soft。
+"""
+    return prompt.strip()
 
 
-def call_llm(prompt):
+def call_llm_if_available(prompt):
     """
-    调用 DashScope OpenAI 兼容接口。
+    可选调用 DashScope/OpenAI-compatible API。
+    如果没有环境变量或 openai 包，则返回空字符串，后续使用默认约束。
     """
+    api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
 
-    if not DASHSCOPE_API_KEY:
-        raise RuntimeError(
-            "未设置 DASHSCOPE_API_KEY。请先执行：\n"
-            "export DASHSCOPE_API_KEY=\"你的apikey\""
-        )
+    if not api_key:
+        return ""
+
+    try:
+        from openai import OpenAI
+    except Exception:
+        return ""
+
+    base_url = os.getenv(
+        "DASHSCOPE_BASE_URL",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+
+    model_name = os.getenv("DASHSCOPE_MODEL", "qwen-plus")
 
     client = OpenAI(
-        api_key=DASHSCOPE_API_KEY,
-        base_url=BASE_URL
+        api_key=api_key,
+        base_url=base_url
     )
 
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "你是知识图谱时序约束生成助手。"
-                    "你必须严格输出 JSON 数组。"
-                    "不要输出 Markdown，不要输出解释文字。"
-                )
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.2
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是知识图谱时序约束生成助手，只输出 JSON 数组。"
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.2,
+        )
 
-    content = response.choices[0].message.content
+        return completion.choices[0].message.content.strip()
 
-    if content is None:
-        raise RuntimeError("LLM 返回内容为空。")
-
-    return content.strip()
+    except Exception as e:
+        print("[WARN] LLM 调用失败，将使用默认约束。错误:", e)
+        return ""
 
 
 def extract_json_array(text):
-    """
-    从 LLM 输出中提取 JSON 数组。
-    即使模型输出了 ```json，也尽量清洗。
-    """
+    if not text:
+        return None
 
     text = text.strip()
 
-    # 去掉 Markdown 代码块
-    text = re.sub(r"^```json\s*", "", text)
-    text = re.sub(r"^```\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    text = text.strip()
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
 
-    # 截取第一个 [ 到最后一个 ]
     start = text.find("[")
     end = text.rfind("]")
 
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("未在 LLM 输出中找到 JSON 数组。")
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(text[start:end + 1])
+            if isinstance(data, list):
+                return data
+        except Exception:
+            return None
 
-    json_text = text[start:end + 1]
-
-    return json.loads(json_text)
+    return None
 
 
-def validate_constraints(constraints):
-    """
-    检查并规范化 LLM 生成的约束。
-    """
+def normalize_constraints(items):
+    rows = []
 
-    if not isinstance(constraints, list):
-        raise ValueError("LLM 输出不是 JSON 数组。")
+    for idx, item in enumerate(items, start=1):
+        relation_a = str(item.get("relation_a", "")).strip().zfill(2)
+        relation_b = str(item.get("relation_b", "")).strip().zfill(2)
 
-    cleaned = []
-
-    for i, item in enumerate(constraints):
-        if not isinstance(item, dict):
+        if relation_a not in CAMEO_TOP_LEVEL_DESC:
             continue
 
-        new_item = {}
+        if relation_b not in CAMEO_TOP_LEVEL_DESC:
+            continue
 
-        for field in REQUIRED_FIELDS:
-            value = item.get(field, "")
-            if value is None:
-                value = ""
-            new_item[field] = str(value).strip()
+        rows.append({
+            "constraint_id": f"LLM_{idx:06d}",
+            "constraint_name": item.get("constraint_name", f"constraint_{idx}"),
+            "relation_a": relation_a,
+            "relation_b": relation_b,
+            "temporal_predicate": item.get("temporal_predicate", ""),
+            "hard_or_soft": item.get("hard_or_soft", "soft"),
+            "expected_action": item.get("expected_action", "review"),
+            "reason": item.get("reason", ""),
+            "source": "llm"
+        })
 
-        if not new_item["constraint_name"]:
-            new_item["constraint_name"] = f"llm_constraint_{i + 1}"
-
-        # 规范 hard_or_soft
-        hs = new_item["hard_or_soft"].lower()
-        if hs not in ["hard", "soft"]:
-            hs = "soft"
-        new_item["hard_or_soft"] = hs
-
-        # 规范 relation_b
-        if not new_item["relation_b"]:
-            new_item["relation_b"] = "none"
-
-        # 规范 expected_action
-        if not new_item["expected_action"]:
-            new_item["expected_action"] = "review"
-
-        # 规范 reason
-        if not new_item["reason"]:
-            new_item["reason"] = "LLM 生成的候选约束，需后续结合 PaTeCon 和人工抽样检查。"
-
-        cleaned.append(new_item)
-
-    if not cleaned:
-        raise ValueError("LLM 输出中没有有效约束。")
-
-    return cleaned
-
-
-def default_constraints():
-    """
-    当 LLM 调用失败时的保守兜底约束。
-    这样可以保证后续流程不中断。
-    """
-
-    return [
-        {
-            "constraint_name": "same_month_material_cooperation_conflict_mixed",
-            "relation_a": "material_cooperation",
-            "relation_b": "material_conflict",
-            "temporal_predicate": "same_month_same_subject_object",
-            "hard_or_soft": "soft",
-            "expected_action": "mark_mixed_or_downgrade",
-            "reason": "同一组织对在同一月份同时存在实质合作和实质冲突，可能表示复杂关系，不宜直接删除，应优先标记为 mixed_relation 或降低置信度后复核。"
-        },
-        {
-            "constraint_name": "same_month_verbal_cooperation_material_conflict_mixed",
-            "relation_a": "verbal_cooperation",
-            "relation_b": "material_conflict",
-            "temporal_predicate": "same_month_same_subject_object",
-            "hard_or_soft": "soft",
-            "expected_action": "mark_mixed",
-            "reason": "同月同时出现合作表态和实质冲突，可能反映复杂外交或组织关系，应标记为 mixed_relation。"
-        },
-        {
-            "constraint_name": "single_source_low_evidence_gdelt_hide",
-            "relation_a": "any",
-            "relation_b": "none",
-            "temporal_predicate": "gdelt_single_source_low_event_count",
-            "hard_or_soft": "soft",
-            "expected_action": "hide",
-            "reason": "GDELT 单源且事件数量较少的派生关系证据不足，适合隐藏或降权，而不是删除原始事件。"
-        },
-        {
-            "constraint_name": "cross_source_supported_relation_keep",
-            "relation_a": "any",
-            "relation_b": "none",
-            "temporal_predicate": "cross_source_supported",
-            "hard_or_soft": "soft",
-            "expected_action": "keep_or_review",
-            "reason": "ICEWS 和 GDELT 共同支持的关系边证据较强，即使触发弱冲突，也不应直接删除。"
-        },
-        {
-            "constraint_name": "verbal_conflict_before_material_conflict_review",
-            "relation_a": "verbal_conflict",
-            "relation_b": "material_conflict",
-            "temporal_predicate": "before_or_overlap",
-            "hard_or_soft": "soft",
-            "expected_action": "review_or_keep",
-            "reason": "言语冲突可能先于实质冲突出现，但该模式不是硬约束，只能作为冲突升级的弱提示。"
-        },
-        {
-            "constraint_name": "same_month_verbal_and_material_conflict_consistent",
-            "relation_a": "verbal_conflict",
-            "relation_b": "material_conflict",
-            "temporal_predicate": "same_month_same_subject_object",
-            "hard_or_soft": "soft",
-            "expected_action": "keep_or_review",
-            "reason": "言语冲突和实质冲突在同一月份并存通常具有语义一致性，可作为冲突关系增强信号，而不是异常。"
-        }
-    ]
+    return rows
 
 
 def main():
-    if not os.path.exists(EDGES_FILE):
-        print(f"未找到输入文件: {EDGES_FILE}")
-        print("请先运行 scripts/07_score_relations.py")
-        return
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
-    edges = pd.read_csv(EDGES_FILE, low_memory=False)
-    intervals = load_intervals()
+    df = read_interval_sample()
 
-    # 关系类型
-    if "relation_type" in edges.columns:
-        relation_types = sorted(
-            edges["relation_type"].dropna().astype(str).unique().tolist()
-        )
-    elif not intervals.empty:
-        relation_types = sorted(
-            intervals["property"].dropna().astype(str).unique().tolist()
-        )
+    prompt = build_prompt(df)
+    PROMPT_OUT.write_text(prompt, encoding="utf-8")
+
+    print("[OK] 已生成 LLM prompt:", PROMPT_OUT)
+
+    raw_response = call_llm_if_available(prompt)
+
+    if raw_response:
+        RAW_RESPONSE_OUT.write_text(raw_response, encoding="utf-8")
+        parsed = extract_json_array(raw_response)
     else:
-        relation_types = list(RELATION_TYPE_DESCRIPTIONS.keys())
+        RAW_RESPONSE_OUT.write_text("", encoding="utf-8")
+        parsed = None
 
-    # 图谱统计
-    stats_text = build_stats_text(edges, intervals)
+    if not parsed:
+        print("[WARN] 未获得可解析 LLM 输出，使用默认 CAMEO 顶层约束模板。")
+        parsed = DEFAULT_CONSTRAINTS
 
-    # 月度关系样例，最多 30 条
-    if not intervals.empty:
-        samples = intervals.sample(
-            n=min(30, len(intervals)),
-            random_state=42
-        )
-    else:
-        samples = pd.DataFrame(
-            columns=["subject", "property", "object", "start_time", "end_time"]
-        )
+    rows = normalize_constraints(parsed)
 
-    # 构造 prompt
-    prompt = build_prompt(relation_types, samples, stats_text)
+    if not rows:
+        rows = normalize_constraints(DEFAULT_CONSTRAINTS)
 
-    with open(LLM_PROMPT_OUT, "w", encoding="utf-8") as f:
-        f.write(prompt)
-
-    print("已生成 LLM prompt:")
-    print(LLM_PROMPT_OUT)
-
-    # 调用 LLM
-    try:
-        raw_response = call_llm(prompt)
-
-        with open(LLM_RAW_RESPONSE_OUT, "w", encoding="utf-8") as f:
-            f.write(raw_response)
-
-        constraints_raw = extract_json_array(raw_response)
-        constraints = validate_constraints(constraints_raw)
-
-        print("LLM 调用成功，JSON 解析成功。")
-
-    except Exception as e:
-        print("LLM 调用或解析失败。")
-        print("错误信息:", e)
-
-        if not USE_DEFAULT_CONSTRAINTS_WHEN_FAILED:
-            return
-
-        print("使用默认保守约束继续生成输出文件。")
-        constraints = default_constraints()
-
-        with open(LLM_RAW_RESPONSE_OUT, "w", encoding="utf-8") as f:
-            f.write(f"LLM 调用失败，使用默认约束。\n错误信息: {e}\n")
-
-    # 输出 JSON
     with open(LLM_JSON_OUT, "w", encoding="utf-8") as f:
-        json.dump(constraints, f, ensure_ascii=False, indent=2)
+        json.dump(rows, f, ensure_ascii=False, indent=2)
 
-    # 输出 CSV
-    constraints_df = pd.DataFrame(constraints)
+    out_df = pd.DataFrame(rows)
 
-    # 保证列顺序
-    for field in REQUIRED_FIELDS:
-        if field not in constraints_df.columns:
-            constraints_df[field] = ""
-
-    constraints_df = constraints_df[REQUIRED_FIELDS]
-
-    constraints_df.to_csv(
+    out_df.to_csv(
         LLM_CSV_OUT,
         index=False,
         encoding="utf-8-sig"
     )
 
-    print("LLM 候选时序约束生成完成")
-    print("输出 prompt:", LLM_PROMPT_OUT)
-    print("输出 raw response:", LLM_RAW_RESPONSE_OUT)
-    print("输出 JSON:", LLM_JSON_OUT)
-    print("输出 CSV:", LLM_CSV_OUT)
-    print("候选约束数量:", len(constraints_df))
+    print("[OK] 已生成:", LLM_JSON_OUT)
+    print("[OK] 已生成:", LLM_CSV_OUT)
+    print("[STAT] LLM constraints:", len(out_df))
 
 
 if __name__ == "__main__":

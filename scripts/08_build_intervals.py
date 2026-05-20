@@ -1,77 +1,103 @@
 # scripts/08_build_intervals.py
 import os
 import calendar
-import shutil
 import pandas as pd
 
 PROCESSED_DIR = "../data/processed"
-PROJECT_RESOURCE_DIR = "../resource"
-PATECON_RESOURCE_DIR = "../PaTeCon-master/resource"
 
 INPUT_FILE = os.path.join(PROCESSED_DIR, "relation_edges_scored.csv")
-
 OUTPUT_FILE = os.path.join(PROCESSED_DIR, "org_relation_intervals.tsv")
-PROJECT_RESOURCE_OUTPUT_FILE = os.path.join(PROJECT_RESOURCE_DIR, "org_relation_intervals.tsv")
-PATECON_RESOURCE_OUTPUT_FILE = os.path.join(PATECON_RESOURCE_DIR, "org_relation_intervals.tsv")
 
-MIN_EVENT_COUNT = 2
-MIN_CONFIDENCE = 0.45
-DOMINANT_RATIO = 0.60
-MIXED_RATIO = 0.30
+# 08 直接输出到 PaTeCon resource，供 10_run_patecon.py 使用
+PATECON_RESOURCE_DIR = "../PaTeCon-master/resource"
+PATECON_OUTPUT_FILE = os.path.join(PATECON_RESOURCE_DIR, "org_relation_intervals.tsv")
+
+MIN_EVENT_COUNT = 1
+MIN_CONFIDENCE = 0.0
+
+VALID_RELATIONS = {f"{i:02d}" for i in range(1, 21)}
 
 
-def month_start_end(month_str):
+def safe_str(x):
+    if pd.isna(x):
+        return ""
+    return str(x).strip()
+
+
+def normalize_relation_type(value):
     """
-    输入:
+    cameotop 分支：
+    relation_type 应为 01~20。
+
+    这里不加 CAMEO_ 前缀。
+    PaTeCon property 直接使用 01、02、...、20。
+    """
+    text = safe_str(value)
+
+    if not text:
+        return ""
+
+    if "." in text:
+        text = text.split(".")[0]
+
+    text = "".join(ch for ch in text if ch.isdigit())
+
+    if not text:
+        return ""
+
+    text = text.zfill(2)
+
+    if text in VALID_RELATIONS:
+        return text
+
+    return ""
+
+
+def month_to_interval(event_month):
+    """
+    将 event_month 转换为 PaTeCon 需要的时间区间格式。
+
+    输入：
         2023-01
-    输出:
+
+    输出：
         20230101, 20230131
 
-    PaTeCon 当前源码要求 start_time/end_time 可以 int()。
-    所以这里不能输出 2023-01-01。
+    注意：
+        PaTeCon 输入时间不要使用 2023-01-01 这种带横线格式。
     """
-    year, month = map(int, str(month_str).split("-"))
+    text = safe_str(event_month)
+
+    if len(text) != 7 or "-" not in text:
+        return "", ""
+
+    year_str, month_str = text.split("-", 1)
+
+    try:
+        year = int(year_str)
+        month = int(month_str)
+    except Exception:
+        return "", ""
+
+    if month < 1 or month > 12:
+        return "", ""
+
     last_day = calendar.monthrange(year, month)[1]
 
     start_time = f"{year:04d}{month:02d}01"
     end_time = f"{year:04d}{month:02d}{last_day:02d}"
 
     return start_time, end_time
-
-
-def safe_int(x, default=0):
-    try:
-        if pd.isna(x):
-            return default
-        return int(float(x))
-    except Exception:
-        return default
-
-
-def safe_float(x, default=0.0):
-    try:
-        if pd.isna(x):
-            return default
-        return float(x)
-    except Exception:
-        return default
-
-
-def ensure_dirs():
-    os.makedirs(PROCESSED_DIR, exist_ok=True)
-    os.makedirs(PROJECT_RESOURCE_DIR, exist_ok=True)
-    os.makedirs(PATECON_RESOURCE_DIR, exist_ok=True)
-
-
 def main():
-    ensure_dirs()
-
     if not os.path.exists(INPUT_FILE):
         print(f"未找到输入文件: {INPUT_FILE}")
-        print("请先运行 scripts/07_score_relations.py")
+        print("请先运行 07_score_relations.py")
         return
 
-    edges = pd.read_csv(INPUT_FILE, low_memory=False)
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+    os.makedirs(PATECON_RESOURCE_DIR, exist_ok=True)
+
+    df = pd.read_csv(INPUT_FILE, dtype=str, low_memory=False).fillna("")
 
     required_cols = [
         "subject_org_id",
@@ -79,83 +105,76 @@ def main():
         "event_month",
         "relation_type",
         "event_count",
-        "confidence"
+        "confidence",
+        "status",
     ]
 
-    for col in required_cols:
-        if col not in edges.columns:
-            print(f"缺少必要字段: {col}")
-            print("当前字段:", list(edges.columns))
-            return
+    missing = [c for c in required_cols if c not in df.columns]
 
-    print("开始构建 PaTeCon 月度关系区间...")
-
-    if "status" in edges.columns:
-        edges = edges[edges["status"] == "active"].copy()
-
-    edges["event_count"] = edges["event_count"].apply(safe_int)
-    edges["confidence"] = edges["confidence"].apply(safe_float)
-
-    candidate_edges = edges[
-        (edges["event_count"] >= MIN_EVENT_COUNT) |
-        (edges["confidence"] >= MIN_CONFIDENCE)
-    ].copy()
-
-    if candidate_edges.empty:
-        print("没有满足条件的关系边，无法生成 PaTeCon 区间。")
+    if missing:
+        print("缺少必要字段:", missing)
+        print("当前字段:", list(df.columns))
         return
 
-    interval_rows = []
+    rows = []
 
-    group_cols = [
-        "subject_org_id",
-        "object_org_id",
-        "event_month"
-    ]
-
-    for (subject_org_id, object_org_id, event_month), group in candidate_edges.groupby(group_cols):
-        total_count = group["event_count"].sum()
-
-        if total_count <= 0:
+    for _, row in df.iterrows():
+        status = safe_str(row.get("status", "active"))
+        if status not in {"active", "review", "downgraded"}:
             continue
 
-        group = group.sort_values(
-            by=["event_count", "confidence"],
-            ascending=False
-        )
+        relation = normalize_relation_type(row["relation_type"])
+        if not relation:
+            continue
 
-        top_row = group.iloc[0]
-        top_ratio = top_row["event_count"] / total_count
+        try:
+            event_count = int(float(row["event_count"]))
+        except Exception:
+            event_count = 0
 
-        if top_ratio >= DOMINANT_RATIO:
-            final_relation_type = top_row["relation_type"]
-        else:
-            strong_types = group[
-                group["event_count"] / total_count >= MIXED_RATIO
-            ]
+        try:
+            confidence = float(row["confidence"])
+        except Exception:
+            confidence = 0.0
 
-            if len(strong_types) >= 2:
-                final_relation_type = "mixed_relation"
-            else:
-                final_relation_type = top_row["relation_type"]
+        if event_count < MIN_EVENT_COUNT:
+            continue
 
-        start_time, end_time = month_start_end(event_month)
+        if confidence < MIN_CONFIDENCE:
+            continue
 
-        interval_rows.append({
-            "subject": str(subject_org_id),
-            "property": str(final_relation_type),
-            "object": str(object_org_id),
-            "start_time": str(start_time),
-            "end_time": str(end_time)
+        start_time, end_time = month_to_interval(row["event_month"])
+
+        if not start_time or not end_time:
+            continue
+
+        subject = safe_str(row["subject_org_id"])
+        obj = safe_str(row["object_org_id"])
+
+        if not subject or not obj:
+            continue
+
+        if subject == obj:
+            continue
+
+        rows.append({
+            "subject": subject,
+            "property": relation,
+            "object": obj,
+            "start_time": start_time,
+            "end_time": end_time,
         })
 
-    intervals = pd.DataFrame(interval_rows)
+    out_df = pd.DataFrame(rows)
 
-    intervals = intervals.drop_duplicates(
-        subset=["subject", "property", "object", "start_time", "end_time"]
-    )
+    if not out_df.empty:
+        out_df = out_df.drop_duplicates()
+        out_df = out_df.sort_values(
+            by=["subject", "property", "object", "start_time", "end_time"]
+        )
 
-    intervals.to_csv(
+    # PaTeCon 通常读取无表头 TSV：subject property object start end
+    out_df.to_csv(
         OUTPUT_FILE,
         sep="\t",
         index=False,
@@ -163,14 +182,19 @@ def main():
         encoding="utf-8"
     )
 
-    shutil.copyfile(OUTPUT_FILE, PROJECT_RESOURCE_OUTPUT_FILE)
-    shutil.copyfile(OUTPUT_FILE, PATECON_RESOURCE_OUTPUT_FILE)
+    out_df.to_csv(
+        PATECON_OUTPUT_FILE,
+        sep="\t",
+        index=False,
+        header=False,
+        encoding="utf-8"
+    )
 
-    print("月度关系区间构建完成")
-    print("输出:", OUTPUT_FILE)
-    print("同步输出:", PROJECT_RESOURCE_OUTPUT_FILE)
-    print("同步输出:", PATECON_RESOURCE_OUTPUT_FILE)
-    print("区间数量:", len(intervals))
+    print("[OK] 已生成 PaTeCon 区间文件:")
+    print(" -", OUTPUT_FILE)
+    print(" -", PATECON_OUTPUT_FILE)
+    print("[STAT] interval rows:", len(out_df))
+    print("[STAT] relation types:", sorted(out_df["property"].unique()) if not out_df.empty else [])
 
 
 if __name__ == "__main__":

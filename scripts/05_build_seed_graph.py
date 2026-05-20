@@ -30,35 +30,35 @@ def clean_name(name):
     name = re.sub(r"^THE\s+", "", name)
     return name
 
-def join_unique_codes(series):
-    values = []
-    for x in series:
-        x = str(x).strip()
-        if x and x.lower() != "nan":
-            values.append(x)
-    return ";".join(sorted(set(values)))
 
 def pick_col(df, candidates):
     lower_map = {c.lower(): c for c in df.columns}
+
     for c in candidates:
         if c in df.columns:
             return c
         if c.lower() in lower_map:
             return lower_map[c.lower()]
+
     return None
 
-def normalize_cameo_code(code):
-    """
-    保留 CAMEO 原始语义，修复 pandas 可能造成的前导零丢失。
 
-    例：
-        10   -> 010
-        20   -> 020
-        40   -> 040
-        51   -> 051
-        100  -> 100
-        120  -> 120
-        010  -> 010
+def normalize_event_code(code):
+    """
+    保留并修复 CAMEO 事件码。
+
+    示例：
+        10  -> 010
+        20  -> 020
+        40  -> 040
+        51  -> 051
+        100 -> 100
+        120 -> 120
+        010 -> 010
+
+    注意：
+        event_code 保留为三位或原始三位以上字符串。
+        relation_type 由 get_cameo_top2() 转成 01~20。
     """
     if code is None or pd.isna(code):
         return ""
@@ -85,79 +85,47 @@ def normalize_cameo_code(code):
     return text
 
 
-def get_cameo_root_code(code):
+def get_cameo_top2(code):
     """
-    从标准化后的 CAMEO 码中取顶层两位码。
+    将 CAMEO 事件码转为顶层两位码。
 
-    例：
+    示例：
         010 -> 01
         020 -> 02
+        040 -> 04
         051 -> 05
         100 -> 10
         120 -> 12
         190 -> 19
-    """
-    code = normalize_cameo_code(code)
 
-    if len(code) < 2:
+    返回：
+        01 ~ 20，字符串格式。
+    """
+    text = normalize_event_code(code)
+
+    if not text:
         return ""
 
-    return code[:2]
-
-def map_relation_type(cameo_code=None, quad_class=None):
-    """
-    将 CAMEO / GDELT QuadClass 映射到粗粒度关系类型。
-
-    QuadClass:
-    1 = verbal cooperation
-    2 = material cooperation
-    3 = verbal conflict
-    4 = material conflict
-    """
-
-    if quad_class is not None and not pd.isna(quad_class):
-        try:
-            q = int(float(quad_class))
-            if q == 1:
-                return "verbal_cooperation"
-            if q == 2:
-                return "material_cooperation"
-            if q == 3:
-                return "verbal_conflict"
-            if q == 4:
-                return "material_conflict"
-        except Exception:
-            pass
-
-    if cameo_code is None or pd.isna(cameo_code):
-        return "mixed_relation"
-
-    code = str(cameo_code).strip()
-
-    if not code:
-        return "mixed_relation"
-
-    # 取 CAMEO 顶层两位码
-    try:
-        top = int(code[:2])
-    except Exception:
-        return "mixed_relation"
-
-    # CAMEO 大致映射
-    if 1 <= top <= 5:
-        return "verbal_cooperation"
-    elif 6 <= top <= 8:
-        return "material_cooperation"
-    elif 9 <= top <= 13:
-        return "verbal_conflict"
-    elif 14 <= top <= 20:
-        return "material_conflict"
+    if len(text) >= 3:
+        top = text[:2]
+    elif len(text) == 2:
+        top = text
     else:
-        return "mixed_relation"
+        top = text.zfill(2)
+
+    try:
+        n = int(top)
+    except Exception:
+        return ""
+
+    if 1 <= n <= 20:
+        return f"{n:02d}"
+
+    return ""
 
 
 def load_org_mapping():
-    orgs = pd.read_csv(ORGANIZATIONS_FILE, low_memory=False)
+    orgs = pd.read_csv(ORGANIZATIONS_FILE, dtype=str, low_memory=False).fillna("")
 
     mapping = {}
 
@@ -165,14 +133,18 @@ def load_org_mapping():
         org_id = row["org_id"]
 
         for col in ["canonical_name", "raw_name", "clean_name", "normalized_name"]:
-            if col in orgs.columns and not pd.isna(row.get(col, "")):
-                mapping[clean_name(row[col])] = org_id
+            if col in orgs.columns:
+                value = row.get(col, "")
+                if value:
+                    mapping[clean_name(value)] = org_id
 
     if os.path.exists(ALIASES_FILE):
-        aliases = pd.read_csv(ALIASES_FILE, low_memory=False)
+        aliases = pd.read_csv(ALIASES_FILE, dtype=str, low_memory=False).fillna("")
         for _, row in aliases.iterrows():
-            mapping[clean_name(row["alias"])] = row["org_id"]
-            mapping[clean_name(row["alias_clean"])] = row["org_id"]
+            if "alias" in aliases.columns and "org_id" in aliases.columns:
+                mapping[clean_name(row["alias"])] = row["org_id"]
+            if "alias_clean" in aliases.columns and "org_id" in aliases.columns:
+                mapping[clean_name(row["alias_clean"])] = row["org_id"]
 
     return mapping
 
@@ -186,13 +158,15 @@ def main():
         print(f"未找到组织文件: {ORGANIZATIONS_FILE}")
         return
 
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
     org_map = load_org_mapping()
 
     first_event = True
     first_evidence = True
     fact_id_counter = 1
 
-    print("开始构建 ICEWS 统一事件表...")
+    print("开始构建 ICEWS 统一事件表，relation_type 使用 CAMEO 顶层码 01~20...")
 
     for chunk in pd.read_csv(
         RAW_ICEWS,
@@ -212,8 +186,8 @@ def main():
         sentence_col = pick_col(chunk, ["sentence_number", "Sentence Number", "SentenceNumber"])
         intensity_col = pick_col(chunk, ["intensity", "Intensity"])
 
-        if not source_col or not target_col or not date_col:
-            print("ICEWS 字段名不匹配，请检查 source/target/date 字段。")
+        if not source_col or not target_col or not date_col or not cameo_col:
+            print("ICEWS 字段名不匹配，请检查 source/target/date/cameo 字段。")
             print("当前字段:", list(chunk.columns))
             return
 
@@ -230,21 +204,26 @@ def main():
             subject_org_id = org_map.get(clean_name(source_name))
             object_org_id = org_map.get(clean_name(target_name))
 
-            # 只保留主体和客体都能对齐到组织表的事件
             if not subject_org_id or not object_org_id:
                 continue
 
-            event_date = row[date_col]
-            raw_cameo_code = row.get(cameo_col, "") if cameo_col else ""
-            cameo_code = normalize_cameo_code(raw_cameo_code)
-            event_root_code = get_cameo_root_code(cameo_code)
+            raw_cameo_code = row.get(cameo_col, "")
+            event_code = normalize_event_code(raw_cameo_code)
+            relation_type = get_cameo_top2(event_code)
 
-            relation_type = map_relation_type(cameo_code=cameo_code)
+            # cameotop 分支：无法映射到 01~20 的事件不进入图谱
+            if not relation_type:
+                continue
+
+            event_date = row[date_col]
 
             location_parts = []
             for c in [city_col, province_col, country_col]:
                 if c and not pd.isna(row.get(c, "")):
-                    location_parts.append(str(row.get(c, "")))
+                    value = str(row.get(c, "")).strip()
+                    if value:
+                        location_parts.append(value)
+
             location = ", ".join(location_parts)
 
             fact_id = "F_%09d" % fact_id_counter
@@ -257,7 +236,7 @@ def main():
                 "subject_name": source_name,
                 "object_org_id": object_org_id,
                 "object_name": target_name,
-                "event_code": cameo_code,
+                "event_code": event_code,
                 "event_date": event_date.strftime("%Y-%m-%d"),
                 "event_month": event_date.strftime("%Y-%m"),
                 "location": location,
@@ -313,9 +292,9 @@ def main():
 
     print("开始构建 ICEWS 种子图谱...")
 
+    # 这里必须 dtype=str，否则 051 会再次变成 51
     events = pd.read_csv(EVENT_FACTS_REL_OUT, low_memory=False, dtype=str).fillna("")
 
-    # 每条事件转为一条图谱边
     seed_graph = events[
         [
             "fact_id",
@@ -334,7 +313,6 @@ def main():
 
     seed_graph.to_csv(ICEWS_SEED_GRAPH_OUT, index=False, encoding="utf-8-sig")
 
-    # 按组织对、月份、关系类型聚合
     relation_edges = events.groupby(
         [
             "subject_org_id",
@@ -346,8 +324,7 @@ def main():
     ).agg(
         subject_name=("subject_name", "first"),
         object_name=("object_name", "first"),
-        event_count=("fact_id", "count"),
-        event_codes=("event_code", join_unique_codes)
+        event_count=("fact_id", "count")
     )
 
     relation_edges.insert(

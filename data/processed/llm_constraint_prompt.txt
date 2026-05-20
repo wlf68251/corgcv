@@ -1,91 +1,105 @@
-你现在需要为一个多源组织机构关系图谱生成候选时序约束。
+你是一个知识图谱时序约束分析助手。
 
-项目背景：
-- 数据来自 ICEWS 与 GDELT。
-- 数据时间范围主要为 2023 年 1 月至 4 月。
-- 原始数据是离散事件，已经按月聚合为组织关系区间。
-- 这些关系是派生关系，不是原始事件本身。
-- 后续会结合 PaTeCon 挖掘出的数据约束，筛选最终校验规则。
-- 约束用于校验不合理派生关系，但不能误删原始事件证据。
+当前任务：
+根据组织机构关系图谱中的 CAMEO 顶层事件类型，生成候选时序约束。
 
-关系类型列表：
-- material_conflict: 实质冲突，例如制裁、军事攻击、逮捕、封锁、武装冲突。
-- material_cooperation: 实质合作，例如援助、经济合作、军事合作、实际行动支持、提供资源。
-- mixed_relation: 混合关系，表示同一时间窗口内存在多种关系并存，不宜简单判定为单一关系。
-- verbal_conflict: 言语冲突，例如批评、谴责、威胁、外交抗议、表达不满。
-- verbal_cooperation: 言语合作，例如声明支持、表达合作意愿、外交沟通、协商、赞同。
+重要说明：
+1. 当前 relation_type 已经使用 CAMEO 顶层码，不使用 verbal_cooperation 等粗粒度类型。
+2. 关系类型是两位字符串：01, 02, ..., 20。
+3. 不要输出 CAMEO_01，直接输出 01。
+4. 这些约束主要用于辅助图谱校验，不应过于绝对。
+5. 优先生成 soft constraint，避免误删真实复杂关系。
+6. 对于同一组织对同一月份出现多种关系，应优先考虑 mixed/review，而不是直接删除。
 
-图谱统计信息：
-关系边数量: 227095
-月度关系区间数量: 173089
-来源分布: {'GDELT': 168513, 'ICEWS': 56675, 'GDELT;ICEWS': 1907}
-关系类型分布: {'verbal_cooperation': 100095, 'verbal_conflict': 42864, 'material_conflict': 34237, 'mixed_relation': 29191, 'material_cooperation': 20708}
-置信度等级分布: {'medium': 186571, 'low': 35118, 'high': 5406}
+CAMEO 顶层关系类型：
+- 01: Make public statement / 公开表态; interval_count=0
+- 02: Appeal / 呼吁、请求; interval_count=0
+- 03: Express intent to cooperate / 表达合作意向; interval_count=0
+- 04: Consult / 磋商、会谈; interval_count=0
+- 05: Engage in diplomatic cooperation / 外交合作; interval_count=0
+- 06: Engage in material cooperation / 物质合作; interval_count=0
+- 07: Provide aid / 提供援助; interval_count=0
+- 08: Yield / 让步; interval_count=0
+- 09: Investigate / 调查; interval_count=0
+- 10: Demand / 要求; interval_count=0
+- 11: Disapprove / 反对、不满; interval_count=0
+- 12: Reject / 拒绝; interval_count=0
+- 13: Threaten / 威胁; interval_count=0
+- 14: Protest / 抗议; interval_count=0
+- 15: Exhibit force posture / 展示武力姿态; interval_count=0
+- 16: Reduce relations / 降低关系; interval_count=0
+- 17: Coerce / 胁迫; interval_count=0
+- 18: Assault / 攻击; interval_count=0
+- 19: Fight / 战斗; interval_count=0
+- 20: Use unconventional mass violence / 非常规大规模暴力; interval_count=0
 
-月度关系样例：
-ORG_000015 material_conflict ORG_000026 20230101 20230131
-ORG_000105 mixed_relation ORG_000021 20230401 20230430
-ORG_000007 verbal_cooperation ORG_000304 20230201 20230228
-ORG_000010 verbal_cooperation ORG_000082 20230201 20230228
-ORG_000234 material_conflict ORG_000754 20230101 20230131
-ORG_000278 mixed_relation ORG_000210 20230201 20230228
-ORG_000207 mixed_relation ORG_000303 20230101 20230131
-ORG_000776 mixed_relation ORG_000002 20230201 20230228
-ORG_000111 material_cooperation ORG_001094 20230401 20230430
-ORG_000692 verbal_cooperation ORG_000003 20230201 20230228
-ORG_000504 verbal_cooperation ORG_000011 20230101 20230131
-ORG_000094 verbal_cooperation ORG_000002 20230201 20230228
-ORG_002752 mixed_relation ORG_000166 20230301 20230331
-ORG_000532 verbal_cooperation ORG_001578 20230101 20230131
-ORG_000044 verbal_cooperation ORG_000020 20230201 20230228
-ORG_000193 mixed_relation ORG_001887 20230101 20230131
-ORG_000592 mixed_relation ORG_000048 20230201 20230228
-ORG_000195 verbal_conflict ORG_000702 20230201 20230228
-ORG_000026 verbal_cooperation ORG_000444 20230401 20230430
-ORG_000897 verbal_cooperation ORG_000047 20230101 20230131
-ORG_000039 material_cooperation ORG_000411 20230401 20230430
-ORG_000066 verbal_conflict ORG_000010 20230101 20230131
-ORG_000982 verbal_cooperation ORG_000041 20230301 20230331
-ORG_004426 mixed_relation ORG_000662 20230201 20230228
-ORG_000003 verbal_cooperation ORG_000042 20230401 20230430
-ORG_003536 verbal_cooperation ORG_000013 20230101 20230131
-ORG_002147 mixed_relation ORG_000075 20230301 20230331
-ORG_001312 verbal_conflict ORG_000024 20230101 20230131
-ORG_000009 verbal_cooperation ORG_000027 20230401 20230430
-ORG_000248 mixed_relation ORG_000005 20230301 20230331
+样例区间：
+ORG_000001 mixed_relation ORG_000001 20230101 20230131
+ORG_000001 mixed_relation ORG_000001 20230201 20230228
+ORG_000001 mixed_relation ORG_000001 20230301 20230331
+ORG_000001 mixed_relation ORG_000001 20230401 20230430
+ORG_000001 mixed_relation ORG_000002 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000002 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000002 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000002 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000003 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000003 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000003 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000003 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000004 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000004 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000004 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000004 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000005 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000005 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000005 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000005 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000006 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000006 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000006 20230301 20230331
+ORG_000001 material_cooperation ORG_000006 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000007 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000007 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000007 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000007 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000008 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000008 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000008 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000008 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000009 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000009 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000009 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000009 20230401 20230430
+ORG_000001 mixed_relation ORG_000010 20230101 20230131
+ORG_000001 material_conflict ORG_000010 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000010 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000010 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000011 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000011 20230201 20230228
+ORG_000001 verbal_cooperation ORG_000011 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000011 20230401 20230430
+ORG_000001 mixed_relation ORG_000012 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000012 20230201 20230228
+ORG_000001 mixed_relation ORG_000012 20230301 20230331
+ORG_000001 verbal_cooperation ORG_000012 20230401 20230430
+ORG_000001 verbal_cooperation ORG_000013 20230101 20230131
+ORG_000001 verbal_cooperation ORG_000013 20230201 20230228
 
-请你生成候选时序约束，输出 JSON 数组。
-每个元素必须包含以下字段：
+请输出 JSON 数组，每个元素格式如下：
+[
+  {
+    "constraint_name": "",
+    "relation_a": "13",
+    "relation_b": "18",
+    "temporal_predicate": "before/disjoint/include/overlap/review",
+    "hard_or_soft": "soft",
+    "expected_action": "review/downgrade/hide/mark_mixed",
+    "reason": ""
+  }
+]
 
-{
-  "constraint_name": "",
-  "relation_a": "",
-  "relation_b": "",
-  "temporal_predicate": "",
-  "hard_or_soft": "",
-  "expected_action": "",
-  "reason": ""
-}
-
-字段含义：
-- constraint_name: 约束名称，使用英文小写和下划线。
-- relation_a: 第一个关系类型，例如 verbal_conflict。
-- relation_b: 第二个关系类型。如果只涉及单个关系，可填 none 或 any。
-- temporal_predicate: 时序谓词，例如 same_month_same_subject_object、before、after、overlap、cross_source_supported、gdelt_single_source_low_event_count。
-- hard_or_soft: 只能填 hard 或 soft。除非非常确定，否则优先 soft。
-- expected_action: 触发约束后的建议动作，例如 keep、review、downgrade、hide、mark_mixed、mark_mixed_or_downgrade。
-- reason: 中文解释，说明为什么该约束合理。
-
-生成要求：
-1. 必须只输出 JSON 数组。
-2. 不要输出 Markdown。
-3. 不要使用 ```json 代码块。
-4. 不要输出额外解释。
-5. 不要生成过于绝对的约束。
-6. 现实组织关系可能同时存在合作和冲突，不能简单互斥。
-7. verbal_conflict 与 material_conflict 可以存在升级关系，但不能认为一定冲突。
-8. material_cooperation 与 material_conflict 如果同月同对象并存，通常应标记为 mixed_relation 或降权复核。
-9. GDELT 单源低证据关系更适合 hide 或 downgrade。
-10. ICEWS 和 GDELT 共同支持的关系一般不直接删除。
-11. hard 约束数量应少，soft 约束数量可以多。
-12. 建议生成 6 到 12 条候选约束。
+要求：
+- relation_a 和 relation_b 必须是 01~20 的两位字符串。
+- 不要添加 CAMEO_ 前缀。
+- 不要生成过强硬的删除规则。
+- 如果语义上不确定，请设置 hard_or_soft 为 soft。
