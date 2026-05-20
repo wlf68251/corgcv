@@ -1,206 +1,359 @@
 # scripts/10_run_patecon.py
-import os
-import shutil
+import sys
 import subprocess
+from pathlib import Path
+
 import pandas as pd
 
-PROCESSED_DIR = "../data/processed"
-RESOURCE_DIR = "../resource"
 
-PATECON_DIR = "../PaTeCon"
+# =========================
+# 基础路径配置
+# =========================
 
-INTERVAL_FILE = os.path.join(RESOURCE_DIR, "org_relation_intervals.tsv")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-PATECON_RESOURCE_DIR = os.path.join(PATECON_DIR, "resource")
-PATECON_DATASET_FILE = os.path.join(PATECON_RESOURCE_DIR, "org_relation_intervals.tsv")
+PATECON_DIR = PROJECT_ROOT / "PaTeCon-master"
+PATECON_RESOURCE_DIR = PATECON_DIR / "resource"
+PATECON_OUTPUT_DIR = PATECON_DIR / "output"
 
-PATECON_OUTPUT_DIR = os.path.join(PATECON_DIR, "output")
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
-CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "patecon_constraints.csv")
-CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "patecon_conflicts.csv")
+# PaTeCon resource 中的数据文件名
+# 注意：该文件已经由 08_build_intervals.py 直接生成到
+# project/PaTeCon-master/resource/org_relation_intervals.tsv
+# 因此本脚本不再复制 tsv 文件。
+PATECON_DATASET_NAME = "org_relation_intervals.tsv"
+PATECON_DATASET_PATH = PATECON_RESOURCE_DIR / PATECON_DATASET_NAME
+
+# PaTeCon 输出文件名规则：
+# resource/org_relation_intervals.tsv
+# -> output/org_relation_intervals.all_constraints
+# -> output/org_relation_intervals.temporal_representation_conflicts
+PATECON_DATASET_STEM = Path(PATECON_DATASET_NAME).stem
+
+PATECON_CONSTRAINTS_FILE = (
+    PATECON_OUTPUT_DIR / f"{PATECON_DATASET_STEM}.all_constraints"
+)
+
+PATECON_TEMPORAL_CONFLICTS_FILE = (
+    PATECON_OUTPUT_DIR / f"{PATECON_DATASET_STEM}.temporal_representation_conflicts"
+)
+
+# 转换后给后续实验使用的文件
+FINAL_CONSTRAINTS_CSV = PROCESSED_DIR / "patecon_constraints.csv"
+FINAL_CONFLICTS_CSV = PROCESSED_DIR / "patecon_conflicts.csv"
+
+# 保存运行日志，便于论文和 GitHub 记录
+LOG_DIR = PROJECT_ROOT / "logs"
+RUN_LOG_FILE = LOG_DIR / "10_run_patecon.log"
 
 
-SUPPORT = 5
-CANDIDATE_CONFIDENCE = 0.5
-CONFIDENCE = 0.8
+# =========================
+# PaTeCon 参数
+# =========================
+
+KNOWLEDGEGRAPH = "other"
+SUPPORT = "200"
+CANDIDATE_CONFIDENCE = "0.5"
+CONFIDENCE = "0.8"
 
 
-def run_command(cmd, cwd):
-    print("运行命令:")
-    print(" ".join(cmd))
+def ensure_dirs():
+    PATECON_RESOURCE_DIR.mkdir(parents=True, exist_ok=True)
+    PATECON_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def check_environment():
+    if not PATECON_DIR.exists():
+        raise FileNotFoundError(
+            f"未找到 PaTeCon 源码目录：{PATECON_DIR}\n"
+            "请确认目录结构为 project/PaTeCon-master"
+        )
+
+    constraint_mining_file = PATECON_DIR / "Constraint_Mining.py"
+    if not constraint_mining_file.exists():
+        raise FileNotFoundError(
+            f"未找到 Constraint_Mining.py：{constraint_mining_file}"
+        )
+
+    if not PATECON_DATASET_PATH.exists():
+        raise FileNotFoundError(
+            f"未找到 PaTeCon 输入文件：{PATECON_DATASET_PATH}\n"
+            "请先运行 scripts/08_build_intervals.py，确保它直接生成：\n"
+            "project/PaTeCon-master/resource/org_relation_intervals.tsv"
+        )
+
+    if PATECON_DATASET_PATH.stat().st_size == 0:
+        raise ValueError(
+            f"PaTeCon 输入文件为空：{PATECON_DATASET_PATH}\n"
+            "请检查 08_build_intervals.py 的输出。"
+        )
+
+
+def run_patecon_constraint_mining():
+    """
+    按 PaTeCon 原始使用方式调用 Constraint_Mining.py。
+    """
+    cmd = [
+        sys.executable,
+        "Constraint_Mining.py",
+        f"--dataset=resource/{PATECON_DATASET_NAME}",
+        f"--knowledgegraph={KNOWLEDGEGRAPH}",
+        f"--support={SUPPORT}",
+        f"--candidate_confidence={CANDIDATE_CONFIDENCE}",
+        f"--confidence={CONFIDENCE}",
+    ]
+
+    print("\n========== Run PaTeCon Constraint_Mining.py ==========")
+    print("[CMD]", " ".join(cmd))
 
     result = subprocess.run(
         cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        cwd=str(PATECON_DIR),
         text=True,
-        encoding="utf-8",
-        errors="ignore"
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
 
-    print("标准输出:")
     print(result.stdout)
 
-    if result.stderr:
-        print("错误输出:")
-        print(result.stderr)
+    RUN_LOG_FILE.write_text(result.stdout, encoding="utf-8")
 
     if result.returncode != 0:
-        raise RuntimeError(f"命令运行失败: {' '.join(cmd)}")
-
-    return result
-
-
-def find_possible_file(base_dir, keywords):
-    """
-    在 PaTeCon 输出目录中查找可能的结果文件。
-    因为不同版本 PaTeCon 输出文件名可能不同，所以这里做保守搜索。
-    """
-    if not os.path.exists(base_dir):
-        return None
-
-    candidates = []
-
-    for root, _, files in os.walk(base_dir):
-        for file in files:
-            lower = file.lower()
-
-            if all(k.lower() in lower for k in keywords):
-                candidates.append(os.path.join(root, file))
-
-    if not candidates:
-        return None
-
-    # 选择最近修改的文件
-    candidates = sorted(candidates, key=lambda x: os.path.getmtime(x), reverse=True)
-    return candidates[0]
-
-
-def convert_text_to_csv(input_file, output_file, default_columns=None):
-    """
-    将 PaTeCon 输出的 txt / csv / tsv 尽量转成 csv。
-    如果无法判断格式，就按行保存为 raw_line。
-    """
-
-    if input_file is None or not os.path.exists(input_file):
-        pd.DataFrame(columns=["raw_line"]).to_csv(
-            output_file,
-            index=False,
-            encoding="utf-8-sig"
+        raise RuntimeError(
+            f"PaTeCon Constraint_Mining.py 执行失败，returncode={result.returncode}\n"
+            f"日志已保存到：{RUN_LOG_FILE}"
         )
+
+    print(f"[OK] PaTeCon 运行日志已保存：{RUN_LOG_FILE}")
+
+
+def parse_constraint_line(raw_line):
+    """
+    解析 PaTeCon 的一行约束。
+
+    常见格式示例：
+    a,P22*P569,d,t5,t6 before a,P39,b,t1,t2|0.9916
+
+    或：
+    a,P569,b,t1,t2 MutualExclusion a,P569,c,t3,t4|0.9934
+
+    这里不强行解析复杂变量，只拆出：
+    - body
+    - temporal_predicate
+    - head
+    - confidence
+    """
+    raw = raw_line.strip()
+
+    if "|" in raw:
+        left, confidence = raw.rsplit("|", 1)
+        confidence = confidence.strip()
+    else:
+        left = raw
+        confidence = ""
+
+    temporal_predicates = [
+        "MutualExclusion",
+        "before",
+        "disjoint",
+        "include",
+        "start",
+        "finish",
+    ]
+
+    constraint_body = left.strip()
+    temporal_predicate = ""
+    constraint_head = ""
+
+    for pred in temporal_predicates:
+        token = f" {pred} "
+        if token in left:
+            parts = left.split(token, 1)
+            constraint_body = parts[0].strip()
+            temporal_predicate = pred
+            constraint_head = parts[1].strip()
+            break
+
+    return {
+        "raw_constraint": raw,
+        "constraint_body": constraint_body,
+        "temporal_predicate": temporal_predicate,
+        "constraint_head": constraint_head,
+        "confidence": confidence,
+    }
+
+
+def convert_constraints_to_csv():
+    """
+    将 PaTeCon 的 org_relation_intervals.all_constraints
+    转换为 data/processed/patecon_constraints.csv。
+    """
+    if not PATECON_CONSTRAINTS_FILE.exists():
+        raise FileNotFoundError(
+            f"未找到 PaTeCon 约束输出文件：{PATECON_CONSTRAINTS_FILE}\n"
+            "请检查 Constraint_Mining.py 是否正常完成，以及 output 文件名是否一致。"
+        )
+
+    rows = []
+
+    with open(PATECON_CONSTRAINTS_FILE, "r", encoding="utf-8") as f:
+        for idx, line in enumerate(f, start=1):
+            raw = line.strip()
+            if not raw:
+                continue
+
+            item = parse_constraint_line(raw)
+            rows.append({
+                "constraint_id": f"PC_{idx:06d}",
+                "raw_constraint": item["raw_constraint"],
+                "constraint_body": item["constraint_body"],
+                "temporal_predicate": item["temporal_predicate"],
+                "constraint_head": item["constraint_head"],
+                "confidence": item["confidence"],
+                "source": "patecon",
+                "source_file": str(PATECON_CONSTRAINTS_FILE),
+            })
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "constraint_id",
+            "raw_constraint",
+            "constraint_body",
+            "temporal_predicate",
+            "constraint_head",
+            "confidence",
+            "source",
+            "source_file",
+        ])
+
+    df.to_csv(FINAL_CONSTRAINTS_CSV, index=False, encoding="utf-8-sig")
+
+    print("\n========== Convert Constraints ==========")
+    print(f"[OK] 已生成：{FINAL_CONSTRAINTS_CSV}")
+    print(f"[INFO] 约束数量：{len(df)}")
+
+
+def convert_temporal_representation_conflicts_to_csv():
+    """
+    将 PaTeCon 的 temporal_representation_conflicts 转换为
+    data/processed/patecon_conflicts.csv。
+
+    该文件来自 PaTeCon 的 temporal_representation_constraint 阶段，
+    主要记录 start_time > end_time 的时间表示错误。
+
+    原始格式通常类似：
+    subject,property,object,start_time,end_time
+    """
+    rows = []
+
+    if not PATECON_TEMPORAL_CONFLICTS_FILE.exists():
+        print("\n========== Convert Temporal Representation Conflicts ==========")
+        print(f"[WARN] 未找到时间表示冲突文件：{PATECON_TEMPORAL_CONFLICTS_FILE}")
+        print("[WARN] 将生成空的 patecon_conflicts.csv")
+
+        df = pd.DataFrame(columns=[
+            "conflict_id",
+            "conflict_type",
+            "raw_conflict",
+            "constraint",
+            "fact1",
+            "fact2",
+            "subject",
+            "relation",
+            "object",
+            "start_time",
+            "end_time",
+            "source",
+            "source_file",
+        ])
+        df.to_csv(FINAL_CONFLICTS_CSV, index=False, encoding="utf-8-sig")
         return
 
-    try:
-        # 先尝试 tsv
-        df = pd.read_csv(input_file, sep="\t", header=None, low_memory=False)
+    with open(PATECON_TEMPORAL_CONFLICTS_FILE, "r", encoding="utf-8") as f:
+        for idx, line in enumerate(f, start=1):
+            raw = line.strip()
+            if not raw:
+                continue
 
-        if df.shape[1] == 1:
-            # 再尝试逗号分隔
-            df2 = pd.read_csv(input_file, sep=",", header=None, low_memory=False)
-            if df2.shape[1] > df.shape[1]:
-                df = df2
+            parts = raw.split(",")
 
-        if default_columns and len(default_columns) == df.shape[1]:
-            df.columns = default_columns
-        else:
-            df.columns = [f"col_{i}" for i in range(df.shape[1])]
+            subject = parts[0].strip() if len(parts) > 0 else ""
+            relation = parts[1].strip() if len(parts) > 1 else ""
+            obj = parts[2].strip() if len(parts) > 2 else ""
+            start_time = parts[3].strip() if len(parts) > 3 else ""
+            end_time = parts[4].strip() if len(parts) > 4 else ""
 
-    except Exception:
-        with open(input_file, "r", encoding="utf-8", errors="ignore") as f:
-            lines = [line.strip() for line in f if line.strip()]
+            rows.append({
+                "conflict_id": f"PTC_{idx:06d}",
+                "conflict_type": "temporal_representation",
+                "raw_conflict": raw,
+                "constraint": "start_time <= end_time",
+                "fact1": raw,
+                "fact2": "",
+                "subject": subject,
+                "relation": relation,
+                "object": obj,
+                "start_time": start_time,
+                "end_time": end_time,
+                "source": "patecon_temporal_representation",
+                "source_file": str(PATECON_TEMPORAL_CONFLICTS_FILE),
+            })
 
-        df = pd.DataFrame({"raw_line": lines})
+    df = pd.DataFrame(rows)
 
-    df.to_csv(output_file, index=False, encoding="utf-8-sig")
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "conflict_id",
+            "conflict_type",
+            "raw_conflict",
+            "constraint",
+            "fact1",
+            "fact2",
+            "subject",
+            "relation",
+            "object",
+            "start_time",
+            "end_time",
+            "source",
+            "source_file",
+        ])
+
+    df.to_csv(FINAL_CONFLICTS_CSV, index=False, encoding="utf-8-sig")
+
+    print("\n========== Convert Temporal Representation Conflicts ==========")
+    print(f"[OK] 已生成：{FINAL_CONFLICTS_CSV}")
+    print(f"[INFO] 时间表示冲突数量：{len(df)}")
 
 
 def main():
-    if not os.path.exists(INTERVAL_FILE):
-        print(f"未找到 PaTeCon 输入文件: {INTERVAL_FILE}")
-        print("请先运行 scripts/08_build_intervals.py")
-        return
+    print("========== Step 10: Run PaTeCon ==========")
 
-    if not os.path.exists(PATECON_DIR):
-        print(f"未找到 PaTeCon 目录: {PATECON_DIR}")
-        print("请检查 PATECON_DIR 是否正确。")
-        return
+    ensure_dirs()
+    check_environment()
 
-    constraint_mining_py = os.path.join(PATECON_DIR, "Constraint_Mining.py")
-    conflict_detection_py = os.path.join(PATECON_DIR, "Conflict_Detection.py")
+    print(f"[INFO] Project root: {PROJECT_ROOT}")
+    print(f"[INFO] PaTeCon dir: {PATECON_DIR}")
+    print(f"[INFO] PaTeCon dataset path: {PATECON_DATASET_PATH}")
+    print(f"[INFO] PaTeCon dataset arg: resource/{PATECON_DATASET_NAME}")
+    print(f"[INFO] Support: {SUPPORT}")
+    print(f"[INFO] Candidate confidence: {CANDIDATE_CONFIDENCE}")
+    print(f"[INFO] Confidence: {CONFIDENCE}")
 
-    if not os.path.exists(constraint_mining_py):
-        print(f"未找到 Constraint_Mining.py: {constraint_mining_py}")
-        return
+    run_patecon_constraint_mining()
 
-    if not os.path.exists(conflict_detection_py):
-        print(f"未找到 Conflict_Detection.py: {conflict_detection_py}")
-        return
+    convert_constraints_to_csv()
 
-    os.makedirs(PATECON_RESOURCE_DIR, exist_ok=True)
-    os.makedirs(PATECON_OUTPUT_DIR, exist_ok=True)
+    convert_temporal_representation_conflicts_to_csv()
 
-    shutil.copyfile(INTERVAL_FILE, PATECON_DATASET_FILE)
-
-    print("已复制 PaTeCon 输入文件:")
-    print(PATECON_DATASET_FILE)
-
-    # 1. 运行约束挖掘
-    mining_cmd = [
-        "python",
-        "Constraint_Mining.py",
-        "--dataset=resource/org_relation_intervals.tsv",
-        "--knowledgegraph=other",
-        f"--support={SUPPORT}",
-        f"--candidate_confidence={CANDIDATE_CONFIDENCE}",
-        f"--confidence={CONFIDENCE}"
-    ]
-
-    try:
-        run_command(mining_cmd, cwd=PATECON_DIR)
-    except Exception as e:
-        print("PaTeCon 约束挖掘失败。")
-        print(e)
-        return
-
-    # 2. 运行冲突检测
-    # 文档中 constraint=output/all_constraints
-    conflict_cmd = [
-        "python",
-        "Conflict_Detection.py",
-        "--dataset=resource/org_relation_intervals.tsv",
-        "--knowledgegraph=other",
-        "--constraint=output/all_constraints"
-    ]
-
-    try:
-        run_command(conflict_cmd, cwd=PATECON_DIR)
-    except Exception as e:
-        print("PaTeCon 冲突检测失败。")
-        print(e)
-        print("如果 output/all_constraints 不存在，请检查 PaTeCon 实际输出目录。")
-        return
-
-    # 3. 查找并转换输出
-    constraint_file = find_possible_file(PATECON_OUTPUT_DIR, ["constraint"])
-    conflict_file = find_possible_file(PATECON_OUTPUT_DIR, ["conflict"])
-
-    print("检测到 PaTeCon 约束输出文件:", constraint_file)
-    print("检测到 PaTeCon 冲突输出文件:", conflict_file)
-
-    convert_text_to_csv(
-        constraint_file,
-        CONSTRAINTS_OUT
-    )
-
-    convert_text_to_csv(
-        conflict_file,
-        CONFLICTS_OUT
-    )
-
-    print("PaTeCon 运行完成")
-    print("输出:", CONSTRAINTS_OUT)
-    print("输出:", CONFLICTS_OUT)
+    print("\n========== Step 10 Finished ==========")
+    print("输出文件：")
+    print(" -", FINAL_CONSTRAINTS_CSV)
+    print(" -", FINAL_CONFLICTS_CSV)
 
 
 if __name__ == "__main__":

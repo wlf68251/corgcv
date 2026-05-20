@@ -1,0 +1,38 @@
+readlines running time is: 0.49678683280944824 s
+duplicate running time is: 0.02397894859313965 s
+len of file is 173089
+len of NonDuplicate utkg is 173089
+read file time: 0.6971702575683594 s
+there are  0  facts whose start > end and they have been removed
+temporal representation running time is 0.03056049346923828 s
+len of Conflict-free utkg is 173089
+len of selected conflict free utkg is 173089
+random sample running time is: 1.33514404296875e-05 s
+constructing graph running time is: 0.28459954261779785 s
+number of entity vertex is  6796
+number of statement vertex is 173089
+len(g.temporalRelationList): 5
+g.temporalRelationList: ['material_cooperation', 'verbal_cooperation', 'verbal_conflict', 'material_conflict', 'mixed_relation']
+-------------------
+Mutual_Exclusion_mining......
+Mutual_Exclusion_Mining time is 0.1073603630065918 s
+functional_mining......
+functional_mining time is 25.8010675907135 s
+inverse_functional_mining......
+inverse_functional_mining time is 25.53481650352478 s
+Single Entity Temporal Order Mining......
+Single Entity Temporal Order Mining time is 4.678112268447876 s
+Mutiple Entity Temporal Order Mining......
+Mutiple Entity Temporal Order Mining time is 0.0735011100769043 s
+constraint mining running time is: 56.19508624076843 s
+Candidate Constraint list:
+(a,material_cooperation,b,t1,t2) & (a,material_cooperation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,verbal_cooperation,b,t1,t2) & (a,verbal_cooperation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,verbal_conflict,b,t1,t2) & (a,verbal_conflict,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,material_conflict,b,t1,t2) & (a,material_conflict,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,mixed_relation,b,t1,t2) & (a,mixed_relation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,material_cooperation,b,t1,t2) & (c,material_cooperation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,verbal_cooperation,b,t1,t2) & (c,verbal_cooperation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,verbal_conflict,b,t1,t2) & (c,verbal_conflict,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,material_conflict,b,t1,t2) & (c,material_conflict,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,mixed_relation,b,t1,t2) & (c,mixed_relation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0

@@ -1,25 +1,25 @@
 ﻿metric,value
-organization_count,11592
-alias_count,19234
-organizations_with_alias_count,11630
-edges_before_check,309751
-edges_scored,309751
-edges_after_check,309843
-gdelt_only_edges,241310
-icews_only_edges,66715
-cross_source_edges,1726
-hidden_edges,183534
-active_edges,126309
-mixed_relation_edges,33352
+organization_count,8356
+alias_count,23703
+organizations_with_alias_count,8356
+edges_before_check,227095
+edges_scored,227095
+edges_after_check,227209
+gdelt_only_edges,168513
+icews_only_edges,56675
+cross_source_edges,1907
+hidden_edges,0
+active_edges,227209
+mixed_relation_edges,29305
 llm_constraints,12
-patecon_constraints,0
+patecon_constraints,10
 final_constraints,12
 enabled_constraints,12
-constraint_source_distribution,{'LLM': 12}
+constraint_source_distribution,"{'LLM': 7, 'LLM+PaTeCon': 5}"
 hard_soft_distribution,{'soft': 12}
-detected_conflicts,220510
-hidden_conflicts,183534
-downgrade_conflicts,33993
-mark_mixed_conflicts,2983
+detected_conflicts,80819
+hidden_conflicts,0
+downgrade_conflicts,77921
+mark_mixed_conflicts,2898
 review_conflicts,0
 conflict_precision_at_50_manual_field,need_manual_annotation

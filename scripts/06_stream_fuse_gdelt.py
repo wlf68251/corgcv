@@ -5,8 +5,7 @@
 06_stream_fuse_gdelt.py
 
 功能：
-    按步骤.md中的“流式融合 GDELT 数据”要求，
-    将 GDELT 事件按日期模拟流式接入，融合到 ICEWS 种子图谱中。
+    将 GDELT 数据融合到 ICEWS 种子图谱中。
 
 输入：
     ../data/processed/organizations.csv
@@ -16,6 +15,22 @@
 输出：
     ../data/processed/relation_edges_before_check.csv
     ../data/processed/stream_update_log.csv
+
+输出 relation_edges_before_check.csv 字段与 05 保持一致：
+
+    edge_id
+    subject_org_id
+    object_org_id
+    event_month
+    relation_type
+    subject_name
+    object_name
+    event_count
+    source_datasets
+    icews_event_count
+    gdelt_event_count
+    confidence
+    status
 
 运行：
     python ./06_stream_fuse_gdelt.py
@@ -42,6 +57,10 @@ STREAM_UPDATE_LOG_PATH = OUT_DIR / "stream_update_log.csv"
 
 CHUNKSIZE = 200000
 
+# GDELT 单源新增边过滤阈值
+# 目的：避免把大量只出现 1 次的低证据 GDELT 边全部写入后续流程
+MIN_GDELT_ONLY_EVENT_COUNT = 3
+
 
 # ============================================================
 # 1. 基础工具函数
@@ -53,22 +72,9 @@ def safe_str(x):
     return str(x).strip()
 
 
-def normalize_name(name):
-    """
-    与 03 保持一致的轻量名称规范化。
-    不做复杂实体对齐，只用于查 organizations.csv。
-    """
-    name = safe_str(name)
-    name = name.upper()
-    name = re.sub(r"\s+", " ", name)
-    return name.strip()
-
-
 def safe_int(x, default=0):
     try:
-        if pd.isna(x):
-            return default
-        text = str(x).strip()
+        text = safe_str(x)
         if text == "":
             return default
         return int(float(text))
@@ -78,14 +84,19 @@ def safe_int(x, default=0):
 
 def safe_float(x, default=0.0):
     try:
-        if pd.isna(x):
-            return default
-        text = str(x).strip()
+        text = safe_str(x)
         if text == "":
             return default
         return float(text)
     except Exception:
         return default
+
+
+def normalize_name(name):
+    name = safe_str(name)
+    name = name.upper()
+    name = re.sub(r"\s+", " ", name)
+    return name.strip()
 
 
 def sql_date_to_month(sql_date):
@@ -94,14 +105,9 @@ def sql_date_to_month(sql_date):
         20230101 -> 2023-01
     """
     text = safe_str(sql_date)
-
     if len(text) < 6:
         return ""
-
-    year = text[:4]
-    month = text[4:6]
-
-    return f"{year}-{month}"
+    return f"{text[:4]}-{text[4:6]}"
 
 
 def sql_date_to_day(sql_date):
@@ -110,46 +116,9 @@ def sql_date_to_day(sql_date):
         20230101 -> 2023-01-01
     """
     text = safe_str(sql_date)
-
     if len(text) < 8:
         return ""
-
-    year = text[:4]
-    month = text[4:6]
-    day = text[6:8]
-
-    return f"{year}-{month}-{day}"
-
-
-def month_start(month):
-    if not month:
-        return ""
-    return f"{month}-01"
-
-
-def month_end(month):
-    """
-    简单生成月末日期。
-    当前数据是 2023-01 到 2023-04，仍写成通用版。
-    """
-    if not month:
-        return ""
-
-    year, mon = month.split("-")
-    year = int(year)
-    mon = int(mon)
-
-    if mon in {1, 3, 5, 7, 8, 10, 12}:
-        day = 31
-    elif mon in {4, 6, 9, 11}:
-        day = 30
-    else:
-        if (year % 400 == 0) or (year % 4 == 0 and year % 100 != 0):
-            day = 29
-        else:
-            day = 28
-
-    return f"{year:04d}-{mon:02d}-{day:02d}"
+    return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
 
 
 # ============================================================
@@ -158,15 +127,13 @@ def month_end(month):
 
 def map_gdelt_relation_type(row):
     """
-    将 GDELT 事件映射到粗粒度组织关系类型。
+    使用 GDELT QuadClass 映射为粗粒度组织关系类型。
 
-    优先使用 QuadClass：
+    QuadClass:
         1 = verbal_cooperation
         2 = material_cooperation
         3 = verbal_conflict
         4 = material_conflict
-
-    若 QuadClass 缺失，则使用 EventRootCode 兜底。
     """
     quad = safe_int(row.get("QuadClass", ""), default=0)
 
@@ -194,32 +161,22 @@ def map_gdelt_relation_type(row):
 
 
 # ============================================================
-# 3. 读取组织表并构建名称映射
+# 3. 读取 organizations.csv，构建名称到 org_id 的映射
 # ============================================================
 
 def load_organization_map():
-    """
-    从 organizations.csv 构建名称到组织节点的映射。
-
-    兼容 03 输出格式：
-        org_id
-        canonical_name
-        raw_name
-        normalized_name
-        clean_name
-    """
     if not ORGANIZATIONS_PATH.exists():
         raise FileNotFoundError(f"organizations.csv 不存在: {ORGANIZATIONS_PATH}")
 
     org_df = pd.read_csv(ORGANIZATIONS_PATH, dtype=str).fillna("")
 
-    required_cols = {"org_id", "canonical_name"}
-    missing = required_cols - set(org_df.columns)
+    required = {"org_id", "canonical_name"}
+    missing = required - set(org_df.columns)
 
     if missing:
         raise ValueError(
-            f"organizations.csv 缺少必要字段: {missing}\n"
-            f"当前字段为: {list(org_df.columns)}"
+            f"organizations.csv 缺少字段: {missing}\n"
+            f"当前字段: {list(org_df.columns)}"
         )
 
     name_to_org = {}
@@ -228,15 +185,15 @@ def load_organization_map():
         org_id = safe_str(row["org_id"])
         canonical_name = safe_str(row["canonical_name"])
 
-        possible_names = set()
+        names = set()
 
         for col in ["canonical_name", "raw_name", "normalized_name", "clean_name"]:
             if col in org_df.columns:
                 value = safe_str(row[col])
                 if value:
-                    possible_names.add(value)
+                    names.add(value)
 
-        for name in possible_names:
+        for name in names:
             norm = normalize_name(name)
             if norm:
                 name_to_org[norm] = {
@@ -258,228 +215,166 @@ def map_actor_to_org(actor_name, name_to_org):
 
 
 # ============================================================
-# 4. 关系边结构
+# 4. 读取 05 生成的 ICEWS 种子边
 # ============================================================
 
-def new_edge(
-    subject_org_id,
-    subject_name,
-    object_org_id,
-    object_name,
-    relation_type,
-    month,
-):
-    return {
-        "subject_org_id": subject_org_id,
-        "subject_name": subject_name,
-        "object_org_id": object_org_id,
-        "object_name": object_name,
-        "relation_type": relation_type,
-        "month": month,
-        "start_date": month_start(month),
-        "end_date": month_end(month),
-
-        "event_count": 0,
-        "icews_event_count": 0,
-        "gdelt_event_count": 0,
-
-        "sources": set(),
-
-        "goldstein_sum": 0.0,
-        "goldstein_count": 0,
-
-        "tone_sum": 0.0,
-        "tone_count": 0,
-
-        "num_mentions": 0,
-        "num_sources": 0,
-        "num_articles": 0,
-
-        "evidence_urls": set(),
-
-        "update_status": "new",
-    }
-
-
-def edge_key(subject_org_id, object_org_id, relation_type, month):
+def make_edge_key(subject_org_id, object_org_id, event_month, relation_type):
     return (
-        subject_org_id,
-        object_org_id,
-        relation_type,
-        month,
+        safe_str(subject_org_id),
+        safe_str(object_org_id),
+        safe_str(event_month),
+        safe_str(relation_type),
     )
 
 
-def add_gdelt_evidence(edge, row):
-    edge["event_count"] += 1
-    edge["gdelt_event_count"] += 1
-    edge["sources"].add("GDELT")
-
-    goldstein = safe_float(row.get("GoldsteinScale", ""), default=0.0)
-    edge["goldstein_sum"] += goldstein
-    edge["goldstein_count"] += 1
-
-    tone = safe_float(row.get("AvgTone", ""), default=0.0)
-    edge["tone_sum"] += tone
-    edge["tone_count"] += 1
-
-    edge["num_mentions"] += safe_int(row.get("NumMentions", ""), default=0)
-    edge["num_sources"] += safe_int(row.get("NumSources", ""), default=0)
-    edge["num_articles"] += safe_int(row.get("NumArticles", ""), default=0)
-
-    url = safe_str(row.get("SOURCEURL", ""))
-    if url:
-        if len(edge["evidence_urls"]) < 5:
-            edge["evidence_urls"].add(url)
-
-
-# ============================================================
-# 5. 加载 ICEWS 种子图谱
-# ============================================================
-
-def find_existing_col(df, candidates):
+def normalize_source_datasets(value):
     """
-    在不同版本的 relation_edges_seed.csv 中兼容字段名。
+    将 source_datasets 统一成集合。
     """
-    normalized_map = {
-        re.sub(r"[^a-z0-9]", "", col.lower()): col
-        for col in df.columns
-    }
+    text = safe_str(value)
 
-    for cand in candidates:
-        key = re.sub(r"[^a-z0-9]", "", cand.lower())
-        if key in normalized_map:
-            return normalized_map[key]
+    if not text:
+        return set()
 
-    return None
+    parts = re.split(r"[;,|]+", text)
+    return {p.strip() for p in parts if p.strip()}
 
 
 def load_seed_edges():
     """
-    加载 05 输出的 relation_edges_seed.csv。
+    加载 relation_edges_seed.csv。
 
-    期望字段可以是以下几类之一：
-        subject_org_id / object_org_id
-        source_org_id / target_org_id
-        subject_name / object_name
-        source_name / target_name
+    这个函数严格按照 05 当前输出字段读取：
+
+        edge_id
+        subject_org_id
+        object_org_id
+        event_month
         relation_type
-        month
-
-    如果文件不存在，则从空图开始融合 GDELT。
+        subject_name
+        object_name
+        event_count
+        source_datasets
+        icews_event_count
+        gdelt_event_count
+        confidence
+        status
     """
-    edges = {}
-
     if not SEED_GRAPH_PATH.exists():
-        print(f"[WARN] seed graph 不存在，将从空图开始: {SEED_GRAPH_PATH}")
-        return edges
+        raise FileNotFoundError(f"relation_edges_seed.csv 不存在: {SEED_GRAPH_PATH}")
 
     seed_df = pd.read_csv(SEED_GRAPH_PATH, dtype=str).fillna("")
 
-    print(f"[OK] loaded seed graph: {len(seed_df)} rows")
+    required_cols = [
+        "edge_id",
+        "subject_org_id",
+        "object_org_id",
+        "event_month",
+        "relation_type",
+        "subject_name",
+        "object_name",
+        "event_count",
+        "source_datasets",
+        "icews_event_count",
+        "gdelt_event_count",
+        "confidence",
+        "status",
+    ]
 
-    subject_id_col = find_existing_col(seed_df, [
-        "subject_org_id", "source_org_id", "head_org_id", "src_org_id"
-    ])
-    object_id_col = find_existing_col(seed_df, [
-        "object_org_id", "target_org_id", "tail_org_id", "dst_org_id"
-    ])
+    missing = [col for col in required_cols if col not in seed_df.columns]
 
-    subject_name_col = find_existing_col(seed_df, [
-        "subject_name", "source_name", "head_name", "src_name"
-    ])
-    object_name_col = find_existing_col(seed_df, [
-        "object_name", "target_name", "tail_name", "dst_name"
-    ])
-
-    relation_col = find_existing_col(seed_df, [
-        "relation_type", "relation", "edge_type"
-    ])
-
-    month_col = find_existing_col(seed_df, [
-        "month", "event_month"
-    ])
-
-    event_count_col = find_existing_col(seed_df, [
-        "event_count", "icews_event_count", "count"
-    ])
-
-    if relation_col is None:
+    if missing:
         raise ValueError(
-            f"relation_edges_seed.csv 缺少 relation_type 字段。\n"
-            f"当前字段为: {list(seed_df.columns)}"
+            f"relation_edges_seed.csv 缺少字段: {missing}\n"
+            f"当前字段: {list(seed_df.columns)}"
         )
 
-    if month_col is None:
-        raise ValueError(
-            f"relation_edges_seed.csv 缺少 month 字段。\n"
-            f"当前字段为: {list(seed_df.columns)}"
-        )
+    edges = {}
 
     for _, row in seed_df.iterrows():
-        subject_org_id = safe_str(row[subject_id_col]) if subject_id_col else ""
-        object_org_id = safe_str(row[object_id_col]) if object_id_col else ""
+        subject_org_id = safe_str(row["subject_org_id"])
+        object_org_id = safe_str(row["object_org_id"])
+        event_month = safe_str(row["event_month"])
+        relation_type = safe_str(row["relation_type"])
 
-        subject_name = safe_str(row[subject_name_col]) if subject_name_col else subject_org_id
-        object_name = safe_str(row[object_name_col]) if object_name_col else object_org_id
-
-        relation_type = safe_str(row[relation_col])
-        month = safe_str(row[month_col])
-
-        if not subject_org_id:
-            subject_org_id = normalize_name(subject_name)
-
-        if not object_org_id:
-            object_org_id = normalize_name(object_name)
-
-        if not subject_org_id or not object_org_id or not relation_type or not month:
+        if not subject_org_id or not object_org_id or not event_month or not relation_type:
             continue
 
-        key = edge_key(
+        key = make_edge_key(
             subject_org_id,
             object_org_id,
+            event_month,
             relation_type,
-            month,
         )
 
-        edge = new_edge(
-            subject_org_id=subject_org_id,
-            subject_name=subject_name,
-            object_org_id=object_org_id,
-            object_name=object_name,
-            relation_type=relation_type,
-            month=month,
-        )
+        source_set = normalize_source_datasets(row["source_datasets"])
+        if not source_set:
+            source_set = {"ICEWS"}
 
-        count = safe_int(row[event_count_col], default=1) if event_count_col else 1
+        edges[key] = {
+            "subject_org_id": subject_org_id,
+            "object_org_id": object_org_id,
+            "event_month": event_month,
+            "relation_type": relation_type,
+            "subject_name": safe_str(row["subject_name"]),
+            "object_name": safe_str(row["object_name"]),
 
-        edge["event_count"] = count
-        edge["icews_event_count"] = count
-        edge["gdelt_event_count"] = 0
-        edge["sources"].add("ICEWS")
-        edge["update_status"] = "seed"
+            "event_count": safe_int(row["event_count"], default=0),
+            "source_datasets": source_set,
+            "icews_event_count": safe_int(row["icews_event_count"], default=0),
+            "gdelt_event_count": safe_int(row["gdelt_event_count"], default=0),
 
-        edges[key] = edge
+            "confidence": safe_float(row["confidence"], default=0.6),
+            "status": safe_str(row["status"]) or "active",
+        }
 
+    print(f"[OK] loaded seed graph: {len(seed_df)} rows")
     print(f"[OK] initialized seed edges: {len(edges)}")
 
     return edges
 
 
 # ============================================================
-# 6. 流式融合 GDELT
+# 5. 融合 GDELT
 # ============================================================
 
-def process_gdelt_stream(edges, name_to_org):
+def create_gdelt_edge(subject_org, object_org, event_month, relation_type):
     """
-    按 chunk 读取 GDELT，并按日期模拟流式接入。
+    新建 GDELT 单源边。
 
-    对每条 GDELT 事件：
-        1. 对齐 Actor1Name / Actor2Name 到组织节点
-        2. 映射事件关系类型
-        3. 按 subject, object, month, relation_type 合并到已有边
-        4. 没有则新建低置信度边
+    注意：
+        confidence 只是初始值，后续 07 会重新计算。
     """
+    return {
+        "subject_org_id": subject_org["org_id"],
+        "object_org_id": object_org["org_id"],
+        "event_month": event_month,
+        "relation_type": relation_type,
+        "subject_name": subject_org["canonical_name"],
+        "object_name": object_org["canonical_name"],
+
+        "event_count": 0,
+        "source_datasets": {"GDELT"},
+        "icews_event_count": 0,
+        "gdelt_event_count": 0,
+
+        "confidence": 0.3,
+        "status": "active",
+    }
+
+
+def add_gdelt_to_edge(edge):
+    edge["event_count"] += 1
+    edge["gdelt_event_count"] += 1
+    edge["source_datasets"].add("GDELT")
+
+    # 如果是 ICEWS + GDELT 跨源支持，给一个临时较高初始值
+    # 后续 07 会重新计算最终 confidence
+    if "ICEWS" in edge["source_datasets"] and "GDELT" in edge["source_datasets"]:
+        edge["confidence"] = max(edge["confidence"], 0.7)
+
+
+def process_gdelt_stream(edges, name_to_org):
     if not GDELT_PATH.exists():
         raise FileNotFoundError(f"GDELT 文件不存在: {GDELT_PATH}")
 
@@ -495,8 +390,6 @@ def process_gdelt_stream(edges, name_to_org):
         "NumSources",
         "NumArticles",
         "AvgTone",
-        "ActionGeo_FullName",
-        "ActionGeo_CountryCode",
         "SOURCEURL",
     ]
 
@@ -522,14 +415,13 @@ def process_gdelt_stream(edges, name_to_org):
 
         print(f"[RUN] GDELT chunk {chunk_id}, rows={len(chunk)}")
 
-        # 按 SQLDATE 排序，模拟按日期流式进入
         chunk = chunk.sort_values(by="SQLDATE")
 
         for _, row in chunk.iterrows():
             day = sql_date_to_day(row["SQLDATE"])
-            month = sql_date_to_month(row["SQLDATE"])
+            event_month = sql_date_to_month(row["SQLDATE"])
 
-            if not day or not month:
+            if not day or not event_month:
                 continue
 
             log = logs_by_day[day]
@@ -558,104 +450,106 @@ def process_gdelt_stream(edges, name_to_org):
 
             relation_type = map_gdelt_relation_type(row)
 
-            key = edge_key(
+            key = make_edge_key(
                 subject_org_id,
                 object_org_id,
+                event_month,
                 relation_type,
-                month,
             )
 
             if key not in edges:
-                edges[key] = new_edge(
-                    subject_org_id=subject_org_id,
-                    subject_name=subject_org["canonical_name"],
-                    object_org_id=object_org_id,
-                    object_name=object_org["canonical_name"],
+                edges[key] = create_gdelt_edge(
+                    subject_org=subject_org,
+                    object_org=object_org,
+                    event_month=event_month,
                     relation_type=relation_type,
-                    month=month,
                 )
-                edges[key]["update_status"] = "new_from_gdelt"
                 log["new_edges"] += 1
             else:
-                if "GDELT" not in edges[key]["sources"]:
-                    edges[key]["update_status"] = "merged_cross_source"
-                else:
-                    if edges[key]["update_status"] == "seed":
-                        edges[key]["update_status"] = "merged_cross_source"
-
                 log["updated_edges"] += 1
 
-            add_gdelt_evidence(edges[key], row)
+            add_gdelt_to_edge(edges[key])
             log["mapped_events"] += 1
 
     return logs_by_day
 
 
 # ============================================================
-# 7. 输出融合后的关系边
+# 6. 输出 relation_edges_before_check.csv
 # ============================================================
 
-def edges_to_dataframe(edges):
+def should_keep_edge(edge):
+    """
+    输出过滤规则：
+
+    1. ICEWS 种子边一定保留；
+    2. ICEWS + GDELT 跨源融合边一定保留；
+    3. GDELT 单源新增边，至少需要出现 MIN_GDELT_ONLY_EVENT_COUNT 次。
+    """
+    sources = edge["source_datasets"]
+
+    if "ICEWS" in sources:
+        return True
+
+    if "GDELT" in sources:
+        return edge["gdelt_event_count"] >= MIN_GDELT_ONLY_EVENT_COUNT
+
+    return False
+
+
+def save_relation_edges(edges):
     rows = []
+    dropped = 0
 
-    for i, (_, edge) in enumerate(edges.items(), start=1):
-        if edge["goldstein_count"] > 0:
-            avg_goldstein = edge["goldstein_sum"] / edge["goldstein_count"]
-        else:
-            avg_goldstein = 0.0
-
-        if edge["tone_count"] > 0:
-            avg_tone = edge["tone_sum"] / edge["tone_count"]
-        else:
-            avg_tone = 0.0
-
-        sources = sorted(edge["sources"])
+    for edge in edges.values():
+        if not should_keep_edge(edge):
+            dropped += 1
+            continue
 
         rows.append({
-            "edge_id": f"EDGE_{i:08d}",
-
             "subject_org_id": edge["subject_org_id"],
-            "subject_name": edge["subject_name"],
             "object_org_id": edge["object_org_id"],
-            "object_name": edge["object_name"],
-
+            "event_month": edge["event_month"],
             "relation_type": edge["relation_type"],
-            "month": edge["month"],
-            "start_date": edge["start_date"],
-            "end_date": edge["end_date"],
-
+            "subject_name": edge["subject_name"],
+            "object_name": edge["object_name"],
             "event_count": edge["event_count"],
+            "source_datasets": ";".join(sorted(edge["source_datasets"])),
             "icews_event_count": edge["icews_event_count"],
             "gdelt_event_count": edge["gdelt_event_count"],
-
-            "source_count": len(sources),
-            "sources": ";".join(sources),
-
-            "avg_goldstein": round(avg_goldstein, 4),
-            "avg_tone": round(avg_tone, 4),
-
-            "num_mentions": edge["num_mentions"],
-            "num_sources": edge["num_sources"],
-            "num_articles": edge["num_articles"],
-
-            "evidence_urls": " | ".join(sorted(edge["evidence_urls"])),
-
-            "update_status": edge["update_status"],
+            "confidence": round(edge["confidence"], 4),
+            "status": edge["status"],
         })
 
     df = pd.DataFrame(rows)
 
     if not df.empty:
         df = df.sort_values(
-            by=["month", "subject_name", "object_name", "relation_type"],
+            by=["event_month", "subject_org_id", "object_org_id", "relation_type"],
             ascending=[True, True, True, True],
+        ).reset_index(drop=True)
+
+        df.insert(
+            0,
+            "edge_id",
+            [f"E_{i:09d}" for i in range(1, len(df) + 1)],
         )
-
-    return df
-
-
-def save_relation_edges(edges):
-    df = edges_to_dataframe(edges)
+    else:
+        df = pd.DataFrame(columns=[
+            "edge_id",
+            "subject_org_id",
+            "object_org_id",
+            "event_month",
+            "relation_type",
+            "subject_name",
+            "object_name",
+            "event_count",
+            "source_datasets",
+            "icews_event_count",
+            "gdelt_event_count",
+            "confidence",
+            "status",
+        ])
 
     df.to_csv(
         RELATION_EDGES_BEFORE_CHECK_PATH,
@@ -665,6 +559,7 @@ def save_relation_edges(edges):
 
     print(f"[OK] relation_edges_before_check.csv: {RELATION_EDGES_BEFORE_CHECK_PATH}")
     print(f"[STAT] relation edges: {len(df)}")
+    print(f"[STAT] dropped low-evidence GDELT-only edges: {dropped}")
 
     return df
 
@@ -673,11 +568,9 @@ def save_stream_update_log(logs_by_day):
     rows = []
 
     for day, log in sorted(logs_by_day.items()):
-        month = day[:7]
-
         rows.append({
             "date": day,
-            "month": month,
+            "event_month": day[:7],
             "processed_events": log["processed_events"],
             "mapped_events": log["mapped_events"],
             "skipped_unmapped": log["skipped_unmapped"],
@@ -700,7 +593,7 @@ def save_stream_update_log(logs_by_day):
 
 
 # ============================================================
-# 8. 主流程
+# 7. 主流程
 # ============================================================
 
 def main():
@@ -712,7 +605,6 @@ def main():
     print()
 
     name_to_org = load_organization_map()
-
     edges = load_seed_edges()
 
     logs_by_day = process_gdelt_stream(

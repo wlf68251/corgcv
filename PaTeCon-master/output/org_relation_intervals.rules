@@ -1,0 +1,10 @@
+a,material_cooperation,b,t1,t2 disjoint a,material_cooperation,c,t3,t4|1.0
+a,verbal_cooperation,b,t1,t2 disjoint a,verbal_cooperation,c,t3,t4|1.0
+a,verbal_conflict,b,t1,t2 disjoint a,verbal_conflict,c,t3,t4|1.0
+a,material_conflict,b,t1,t2 disjoint a,material_conflict,c,t3,t4|1.0
+a,mixed_relation,b,t1,t2 disjoint a,mixed_relation,c,t3,t4|1.0
+a,material_cooperation,b,t1,t2 disjoint c,material_cooperation,b,t3,t4|1.0
+a,verbal_cooperation,b,t1,t2 disjoint c,verbal_cooperation,b,t3,t4|1.0
+a,verbal_conflict,b,t1,t2 disjoint c,verbal_conflict,b,t3,t4|1.0
+a,material_conflict,b,t1,t2 disjoint c,material_conflict,b,t3,t4|1.0
+a,mixed_relation,b,t1,t2 disjoint c,mixed_relation,b,t3,t4|1.0

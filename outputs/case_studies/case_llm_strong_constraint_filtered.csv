@@ -1,2 +1,1 @@
 ﻿constraint_id,constraint_name,relation_a,relation_b,temporal_predicate,hard_or_soft,expected_action,reason,source,enabled,support_level,final_decision
-LC_0004,material_conflict_and_material_cooperation_same_month,material_conflict,material_cooperation,overlap,soft,mark_mixed,同一时间窗口内同时存在实质冲突与合作，应标记为混合关系；该约束由 hard 调整为 soft，以避免误删现实中的复杂组织关系。,LLM,True,semantic_only,enabled_soft
