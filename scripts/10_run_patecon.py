@@ -53,7 +53,7 @@ RUN_LOG_FILE = LOG_DIR / "10_run_patecon.log"
 # =========================
 
 KNOWLEDGEGRAPH = "other"
-SUPPORT = "200"
+SUPPORT = "100"
 CANDIDATE_CONFIDENCE = "0.5"
 CONFIDENCE = "0.8"
 

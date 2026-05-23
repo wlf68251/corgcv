@@ -2,24 +2,24 @@
 organization_count,8356
 alias_count,23703
 organizations_with_alias_count,8356
-edges_before_check,227095
-edges_scored,227095
-edges_after_check,227209
-gdelt_only_edges,168513
-icews_only_edges,56675
-cross_source_edges,1907
+edges_before_check,267242
+edges_scored,267242
+edges_after_check,267242
+gdelt_only_edges,197245
+icews_only_edges,65352
+cross_source_edges,4645
 hidden_edges,0
-active_edges,227209
-mixed_relation_edges,29305
-llm_constraints,12
-patecon_constraints,10
-final_constraints,12
-enabled_constraints,12
-constraint_source_distribution,"{'LLM': 7, 'LLM+PaTeCon': 5}"
-hard_soft_distribution,{'soft': 12}
-detected_conflicts,80819
+active_edges,267242
+mixed_relation_edges,9110
+llm_constraints,27
+patecon_constraints,38
+final_constraints,65
+enabled_constraints,65
+constraint_source_distribution,"{'PaTeCon': 38, 'LLM': 27}"
+hard_soft_distribution,{'soft': 65}
+detected_conflicts,122614
 hidden_conflicts,0
-downgrade_conflicts,77921
-mark_mixed_conflicts,2898
+downgrade_conflicts,113504
+mark_mixed_conflicts,9110
 review_conflicts,0
 conflict_precision_at_50_manual_field,need_manual_annotation

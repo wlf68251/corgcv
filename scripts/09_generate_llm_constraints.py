@@ -10,6 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
+
+DASHSCOPE_API_KEY = "sk-58624b939f654783bc6f7e909a76c8fa"
+BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+MODEL_NAME = "qwen-turbo"
+
 INTERVAL_FILE = PROCESSED_DIR / "org_relation_intervals.tsv"
 
 PROMPT_OUT = PROCESSED_DIR / "llm_constraint_prompt.txt"
@@ -172,25 +177,45 @@ CAMEO 顶层关系类型：
 
 def call_llm_if_available(prompt):
     """
-    可选调用 DashScope/OpenAI-compatible API。
-    如果没有环境变量或 openai 包，则返回空字符串，后续使用默认约束。
+    调用 DashScope OpenAI-compatible API。
+
+    优先使用环境变量：
+    - DASHSCOPE_API_KEY
+    - DASHSCOPE_BASE_URL
+    - DASHSCOPE_MODEL
+
+    如果环境变量不存在，则使用文件顶部的：
+    - DASHSCOPE_API_KEY
+    - BASE_URL
+    - MODEL_NAME
     """
+
     api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
 
     if not api_key:
+        api_key = DASHSCOPE_API_KEY.strip()
+
+    if not api_key or api_key == "你的真实key":
+        print("[WARN] 未检测到有效 DASHSCOPE_API_KEY，跳过 LLM 调用。")
         return ""
 
     try:
         from openai import OpenAI
-    except Exception:
+    except Exception as e:
+        print("[WARN] openai 包导入失败，跳过 LLM 调用。错误:", e)
         return ""
 
-    base_url = os.getenv(
-        "DASHSCOPE_BASE_URL",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    )
+    base_url = os.getenv("DASHSCOPE_BASE_URL", "").strip()
+    if not base_url:
+        base_url = BASE_URL
 
-    model_name = os.getenv("DASHSCOPE_MODEL", "qwen-plus")
+    model_name = os.getenv("DASHSCOPE_MODEL", "").strip()
+    if not model_name:
+        model_name = MODEL_NAME
+
+    print("[INFO] 正在调用 LLM...")
+    print("[INFO] BASE_URL:", base_url)
+    print("[INFO] MODEL_NAME:", model_name)
 
     client = OpenAI(
         api_key=api_key,
@@ -203,7 +228,7 @@ def call_llm_if_available(prompt):
             messages=[
                 {
                     "role": "system",
-                    "content": "你是知识图谱时序约束生成助手，只输出 JSON 数组。"
+                    "content": "你是知识图谱时序约束生成助手。你必须只输出 JSON 数组，不要输出 Markdown，不要输出解释。"
                 },
                 {
                     "role": "user",
@@ -213,12 +238,21 @@ def call_llm_if_available(prompt):
             temperature=0.2,
         )
 
-        return completion.choices[0].message.content.strip()
+        content = completion.choices[0].message.content
+
+        if content is None:
+            print("[WARN] LLM 返回内容为空。")
+            return ""
+
+        content = content.strip()
+
+        print("[INFO] 已获得 LLM 原始输出，长度:", len(content))
+
+        return content
 
     except Exception as e:
         print("[WARN] LLM 调用失败，将使用默认约束。错误:", e)
         return ""
-
 
 def extract_json_array(text):
     if not text:

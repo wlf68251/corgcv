@@ -1,31 +1,31 @@
 ﻿edge_id,subject_org_id,object_org_id,event_month,relation_type,subject_name,object_name,event_count,source_datasets,icews_event_count,gdelt_event_count,confidence,status
-E_000000004,ORG_000001,ORG_000002,2023-01,material_conflict,Government (India),Police (India),178,GDELT;ICEWS,2,176,0.7,active
-E_000000007,ORG_000001,ORG_000002,2023-01,verbal_conflict,Government (Peru),Police (Peru),90,GDELT;ICEWS,10,80,0.7,active
-E_000000011,ORG_000001,ORG_000004,2023-01,material_conflict,Government (Honduras),United States,24,GDELT;ICEWS,2,22,0.7,active
-E_000000014,ORG_000001,ORG_000004,2023-01,verbal_conflict,Government (Brazil),United States,16,GDELT;ICEWS,6,10,0.7,active
-E_000000023,ORG_000001,ORG_000006,2023-01,verbal_conflict,Government (Argentina),Media (Argentina),95,GDELT;ICEWS,1,94,0.7,active
-E_000000028,ORG_000001,ORG_000007,2023-01,verbal_conflict,Government (Fiji),Student (Fiji),36,GDELT;ICEWS,2,34,0.7,active
-E_000000034,ORG_000001,ORG_000009,2023-01,material_conflict,Government (Peru),Business (Peru),52,GDELT;ICEWS,2,50,0.7,active
-E_000000037,ORG_000001,ORG_000009,2023-01,verbal_conflict,Government (Hong Kong),Business (Hong Kong),60,GDELT;ICEWS,4,56,0.7,active
-E_000000039,ORG_000001,ORG_000010,2023-01,material_conflict,Government (Chile),Congress (Chile),184,GDELT;ICEWS,2,182,0.7,active
-E_000000042,ORG_000001,ORG_000010,2023-01,verbal_conflict,Government (Argentina),Congress (Argentina),61,GDELT;ICEWS,1,60,0.7,active
-E_000000044,ORG_000001,ORG_000011,2023-01,material_conflict,Government (Ukraine),Military (Russia),29,GDELT;ICEWS,5,24,0.7,active
-E_000000047,ORG_000001,ORG_000011,2023-01,verbal_conflict,Government (Gambia),Military (Gambia),38,GDELT;ICEWS,12,26,0.7,active
-E_000000051,ORG_000001,ORG_000013,2023-01,material_conflict,Government (El Salvador),Criminal (El Salvador),65,GDELT;ICEWS,3,62,0.7,active
-E_000000054,ORG_000001,ORG_000013,2023-01,verbal_conflict,Government (Kazakhstan),Criminal (Kazakhstan),29,GDELT;ICEWS,1,28,0.7,active
-E_000000086,ORG_000001,ORG_000024,2023-01,verbal_conflict,Government (Ukraine),Bank (Ukraine),23,GDELT;ICEWS,1,22,0.7,active
-E_000000088,ORG_000001,ORG_000025,2023-01,material_conflict,Government (Venezuela),Lawmaker (Venezuela),7,GDELT;ICEWS,1,6,0.7,active
-E_000000097,ORG_000001,ORG_000027,2023-01,verbal_conflict,Government (United Kingdom),Russia,18,GDELT;ICEWS,12,6,0.7,active
-E_000000106,ORG_000001,ORG_000030,2023-01,material_conflict,Government (Japan),China,9,GDELT;ICEWS,7,2,0.7,active
-E_000000108,ORG_000001,ORG_000030,2023-01,verbal_conflict,Government (Japan),China,7,GDELT;ICEWS,5,2,0.7,active
-E_000000115,ORG_000001,ORG_000032,2023-01,material_conflict,Government (Hong Kong),United Kingdom,10,GDELT;ICEWS,2,8,0.7,active
-E_000000118,ORG_000001,ORG_000032,2023-01,verbal_conflict,Government (Venezuela),United Kingdom,12,GDELT;ICEWS,4,8,0.7,active
-E_000000137,ORG_000001,ORG_000037,2023-01,material_conflict,Government (Iran),Protester (Iran),26,GDELT;ICEWS,2,24,0.7,active
-E_000000140,ORG_000001,ORG_000037,2023-01,verbal_conflict,Government (Peru),Protester (Peru),33,GDELT;ICEWS,1,32,0.7,active
-E_000000148,ORG_000001,ORG_000039,2023-01,verbal_conflict,Government (Middle East),Israel,25,GDELT;ICEWS,1,24,0.7,active
-E_000000175,ORG_000001,ORG_000048,2023-01,material_conflict,Government (Argentina),United Nations,16,GDELT;ICEWS,2,14,0.7,active
-E_000000189,ORG_000001,ORG_000051,2023-01,verbal_conflict,Government (Bolivia),Representatives (Bolivia),13,GDELT;ICEWS,1,12,0.7,active
-E_000000215,ORG_000001,ORG_000059,2023-01,verbal_conflict,Government (India),Professor (India),5,GDELT;ICEWS,1,4,0.7,active
-E_000000270,ORG_000001,ORG_000081,2023-01,verbal_conflict,Government (Germany),European Union,9,GDELT;ICEWS,1,8,0.7,active
-E_000000290,ORG_000001,ORG_000090,2023-01,verbal_conflict,Government (Kazakhstan),Legislature (Kazakhstan),15,GDELT;ICEWS,1,14,0.7,active
-E_000000296,ORG_000001,ORG_000092,2023-01,material_conflict,Government (Australia),Australia,7,GDELT;ICEWS,3,4,0.7,active
+E_000000007,ORG_000001,ORG_000002,2023-01,01,Government (Peru),Police (Peru),49,GDELT;ICEWS,11,38,0.7,active
+E_000000011,ORG_000001,ORG_000002,2023-01,05,Government (Ukraine),Police (Ukraine),51,GDELT;ICEWS,1,50,0.7,active
+E_000000017,ORG_000001,ORG_000002,2023-01,11,Government (Philippines),Police (Philippines),33,GDELT;ICEWS,1,32,0.7,active
+E_000000030,ORG_000001,ORG_000004,2023-01,01,Government (Brazil),United States,31,GDELT;ICEWS,1,30,0.7,active
+E_000000031,ORG_000001,ORG_000004,2023-01,02,Government (Honduras),United States,16,GDELT;ICEWS,2,14,0.7,active
+E_000000033,ORG_000001,ORG_000004,2023-01,04,Government (Cuba),United States,34,GDELT;ICEWS,4,30,0.7,active
+E_000000034,ORG_000001,ORG_000004,2023-01,05,Government (Mexico),United States,27,GDELT;ICEWS,7,20,0.7,active
+E_000000036,ORG_000001,ORG_000004,2023-01,08,Government (Iraq),United States,24,GDELT;ICEWS,2,22,0.7,active
+E_000000039,ORG_000001,ORG_000004,2023-01,11,Government (Ukraine),United States,6,GDELT;ICEWS,2,4,0.7,active
+E_000000064,ORG_000001,ORG_000006,2023-01,04,Government (Hong Kong),Media (Hong Kong),72,GDELT;ICEWS,2,70,0.7,active
+E_000000065,ORG_000001,ORG_000006,2023-01,05,Government (Canada),Media (Canada),27,GDELT;ICEWS,1,26,0.7,active
+E_000000067,ORG_000001,ORG_000006,2023-01,07,Government (India),Media (India),18,GDELT;ICEWS,2,16,0.7,active
+E_000000071,ORG_000001,ORG_000006,2023-01,11,Government (Argentina),Media (Argentina),33,GDELT;ICEWS,1,32,0.7,active
+E_000000076,ORG_000001,ORG_000007,2023-01,01,Government (Fiji),Student (Fiji),27,GDELT;ICEWS,1,26,0.7,active
+E_000000078,ORG_000001,ORG_000007,2023-01,03,Government (India),Student (India),27,GDELT;ICEWS,3,24,0.7,active
+E_000000083,ORG_000001,ORG_000007,2023-01,08,Government (Hong Kong),Student (Hong Kong),5,GDELT;ICEWS,1,4,0.7,active
+E_000000087,ORG_000001,ORG_000007,2023-01,13,Government (India),Student (India),13,GDELT;ICEWS,1,12,0.7,active
+E_000000106,ORG_000001,ORG_000009,2023-01,01,Government (Hong Kong),Business (Hong Kong),71,GDELT;ICEWS,3,68,0.7,active
+E_000000107,ORG_000001,ORG_000009,2023-01,02,Government (Peru),Business (Peru),86,GDELT;ICEWS,2,84,0.7,active
+E_000000109,ORG_000001,ORG_000009,2023-01,04,Government (Hong Kong),Business (Hong Kong),99,GDELT;ICEWS,1,98,0.7,active
+E_000000110,ORG_000001,ORG_000009,2023-01,05,Government (China),Business (China),118,GDELT;ICEWS,8,110,0.7,active
+E_000000111,ORG_000001,ORG_000009,2023-01,06,Government (Canada),Business (Canada),42,GDELT;ICEWS,2,40,0.7,active
+E_000000113,ORG_000001,ORG_000009,2023-01,08,Government (Germany),Business (Germany),11,GDELT;ICEWS,1,10,0.7,active
+E_000000116,ORG_000001,ORG_000009,2023-01,11,Government (Peru),Business (Spain),25,GDELT;ICEWS,1,24,0.7,active
+E_000000122,ORG_000001,ORG_000010,2023-01,01,Government (Argentina),Congress (Argentina),27,GDELT;ICEWS,1,26,0.7,active
+E_000000123,ORG_000001,ORG_000010,2023-01,02,Government (Chile),Congress (Chile),38,GDELT;ICEWS,2,36,0.7,active
+E_000000126,ORG_000001,ORG_000010,2023-01,05,Government (Brazil),Congress (Brazil),43,GDELT;ICEWS,1,42,0.7,active
+E_000000136,ORG_000001,ORG_000011,2023-01,01,Government (Mali),Military (Cote d'Ivoire),24,GDELT;ICEWS,4,20,0.7,active
+E_000000137,ORG_000001,ORG_000011,2023-01,02,Government (United Kingdom),Military (United Kingdom),16,GDELT;ICEWS,2,14,0.7,active
+E_000000138,ORG_000001,ORG_000011,2023-01,03,Government (Brazil),Military (Brazil),20,GDELT;ICEWS,2,18,0.7,active

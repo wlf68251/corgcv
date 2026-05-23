@@ -1,6 +1,27 @@
 # scripts/12_evaluate.py
+# -*- coding: utf-8 -*-
+
+"""
+12_evaluate.py
+
+说明：
+    本脚本严格保持原 12_evaluate.py 的输入文件、输出文件名称和输出结构不变。
+
+    修改目的：
+        适配 cameotop 分支中 relation_type = 01~20 的 CAMEO 顶层码。
+
+    不做的事情：
+        1. 不新增输出文件；
+        2. 不修改原有输出文件名；
+        3. 不再假设 relation_type 中存在 verbal_cooperation / material_conflict / mixed_relation；
+        4. CASE_MIXED_RELATION_OUT 文件名仍然保留为原来的 case_mixed_relation.csv，
+           但其中内容改为复杂关系 / mark_complex / complex_relation 的候选案例。
+"""
+
 import os
+import re
 import pandas as pd
+
 
 PROCESSED_DIR = "../data/processed"
 
@@ -32,6 +53,21 @@ CASE_LLM_STRONG_FILTERED_OUT = os.path.join(CASE_DIR, "case_llm_strong_constrain
 CASE_MIXED_RELATION_OUT = os.path.join(CASE_DIR, "case_mixed_relation.csv")
 
 
+# ============================================================
+# cameotop 分支：CAMEO 顶层码定义
+# ============================================================
+
+CAMEO_TOP_RELATIONS = {f"{i:02d}" for i in range(1, 21)}
+
+VERBAL_COOPERATION = {"01", "02", "03", "04", "05"}
+MATERIAL_COOPERATION = {"06", "07", "08"}
+VERBAL_CONFLICT = {"09", "10", "11", "12", "13", "14"}
+MATERIAL_CONFLICT = {"15", "16", "17", "18", "19", "20"}
+
+COOPERATION_RELATIONS = VERBAL_COOPERATION | MATERIAL_COOPERATION
+CONFLICT_RELATIONS = VERBAL_CONFLICT | MATERIAL_CONFLICT
+
+
 def ensure_dirs():
     os.makedirs(EVAL_DIR, exist_ok=True)
     os.makedirs(CASE_DIR, exist_ok=True)
@@ -41,7 +77,8 @@ def read_csv_if_exists(path):
     if not os.path.exists(path):
         return pd.DataFrame()
     try:
-        return pd.read_csv(path, low_memory=False)
+        # dtype=str：避免 01 变成 1
+        return pd.read_csv(path, dtype=str, low_memory=False).fillna("")
     except Exception:
         return pd.DataFrame()
 
@@ -54,7 +91,10 @@ def safe_int(x, default=0):
     try:
         if pd.isna(x):
             return default
-        return int(float(x))
+        text = str(x).strip()
+        if not text:
+            return default
+        return int(float(text))
     except Exception:
         return default
 
@@ -63,7 +103,10 @@ def safe_float(x, default=0.0):
     try:
         if pd.isna(x):
             return default
-        return float(x)
+        text = str(x).strip()
+        if not text:
+            return default
+        return float(text)
     except Exception:
         return default
 
@@ -72,6 +115,55 @@ def sample_df(df, n=100, random_state=42):
     if df.empty:
         return df
     return df.sample(n=min(n, len(df)), random_state=random_state)
+
+
+def normalize_cameo_relation(x):
+    """
+    将 relation_type 统一为 01~20。
+
+    支持：
+        1      -> 01
+        01     -> 01
+        01.0   -> 01
+        CAMEO_01 -> 01
+    """
+    if pd.isna(x):
+        return ""
+
+    text = str(x).strip()
+
+    if not text:
+        return ""
+
+    if "." in text:
+        text = text.split(".")[0]
+
+    text = re.sub(r"\D", "", text)
+
+    if not text:
+        return ""
+
+    text = text.zfill(2)
+
+    if text in CAMEO_TOP_RELATIONS:
+        return text
+
+    return ""
+
+
+def cameo_relation_category(x):
+    r = normalize_cameo_relation(x)
+
+    if r in VERBAL_COOPERATION:
+        return "verbal_cooperation"
+    if r in MATERIAL_COOPERATION:
+        return "material_cooperation"
+    if r in VERBAL_CONFLICT:
+        return "verbal_conflict"
+    if r in MATERIAL_CONFLICT:
+        return "material_conflict"
+
+    return ""
 
 
 def evaluate_organization_scale(orgs, aliases):
@@ -123,8 +215,15 @@ def evaluate_fusion(edges_before, edges_scored, edges_after):
         hidden_edges = 0
         active_edges = 0
 
-    if not edges_after.empty and "relation_type" in edges_after.columns:
-        mixed_relation_edges = len(edges_after[edges_after["relation_type"] == "mixed_relation"])
+    # 保持原 summary 字段名 mixed_relation_edges 不变。
+    # cameotop 分支不再生成 mixed_relation，因此这里统计 check_action=mark_complex 的复杂关系边数。
+    if not edges_after.empty:
+        if "check_action" in edges_after.columns:
+            mixed_relation_edges = len(edges_after[edges_after["check_action"].astype(str) == "mark_complex"])
+        elif "relation_type" in edges_after.columns:
+            mixed_relation_edges = len(edges_after[edges_after["relation_type"].astype(str) == "mixed_relation"])
+        else:
+            mixed_relation_edges = 0
     else:
         mixed_relation_edges = 0
 
@@ -188,7 +287,16 @@ def evaluate_conflicts(conflicts):
         actions = conflicts["action"].fillna("").astype(str)
         hidden_conflicts = len(conflicts[actions == "hide"])
         downgrade_conflicts = len(conflicts[actions == "downgrade"])
-        mark_mixed_conflicts = len(conflicts[actions.str.contains("mixed", case=False, regex=False)])
+
+        # 保持原字段 mark_mixed_conflicts 不变。
+        # cameotop 分支中用 mark_complex 表示复杂关系。
+        mark_mixed_conflicts = len(
+            conflicts[
+                actions.str.contains("mixed", case=False, regex=False) |
+                (actions == "mark_complex")
+            ]
+        )
+
         review_conflicts = len(conflicts[actions == "review"])
     else:
         hidden_conflicts = 0
@@ -214,9 +322,12 @@ def write_organization_alignment_sample(orgs, aliases):
     sample = sample_df(orgs, n=100)
 
     if not aliases.empty and "org_id" in aliases.columns:
-        alias_group = aliases.groupby("org_id")["alias"].apply(lambda x: "; ".join(x.astype(str).head(5))).reset_index()
-        alias_group = alias_group.rename(columns={"alias": "sample_aliases"})
-        sample = sample.merge(alias_group, on="org_id", how="left")
+        if "alias" in aliases.columns:
+            alias_group = aliases.groupby("org_id")["alias"].apply(lambda x: "; ".join(x.astype(str).head(5))).reset_index()
+            alias_group = alias_group.rename(columns={"alias": "sample_aliases"})
+            sample = sample.merge(alias_group, on="org_id", how="left")
+        else:
+            sample["sample_aliases"] = ""
     else:
         sample["sample_aliases"] = ""
 
@@ -277,7 +388,12 @@ def write_case_studies(edges_before, edges_after, final_constraints):
     1. 多源共同支持关系
     2. GDELT 单源低证据关系
     3. LLM 过强约束被过滤
-    4. 复杂关系改为 mixed_relation
+    4. 复杂关系候选
+
+    注意：
+        输出文件名严格保持原始版本不变。
+        第 4 类仍然输出到 case_mixed_relation.csv。
+        在 cameotop 分支下，该文件存放 check_action=mark_complex 或复杂关系相关案例。
     """
 
     # 1. 多源共同支持关系
@@ -289,7 +405,9 @@ def write_case_studies(edges_before, edges_after, final_constraints):
         ].copy()
 
         if "confidence" in cross_source.columns:
-            cross_source = cross_source.sort_values(by="confidence", ascending=False)
+            cross_source["_confidence_num"] = cross_source["confidence"].apply(safe_float)
+            cross_source = cross_source.sort_values(by="_confidence_num", ascending=False)
+            cross_source = cross_source.drop(columns=["_confidence_num"], errors="ignore")
 
         cross_source.head(30).to_csv(CASE_CROSS_SOURCE_OUT, index=False, encoding="utf-8-sig")
     else:
@@ -334,18 +452,31 @@ def write_case_studies(edges_before, edges_after, final_constraints):
     else:
         pd.DataFrame().to_csv(CASE_LLM_STRONG_FILTERED_OUT, index=False, encoding="utf-8-sig")
 
-    # 4. 复杂关系改为 mixed_relation
-    if not edges_after.empty and "relation_type" in edges_after.columns:
-        mixed = edges_after[edges_after["relation_type"] == "mixed_relation"].copy()
+    # 4. 复杂关系候选
+    # 原始文件名保持 CASE_MIXED_RELATION_OUT = case_mixed_relation.csv
+    if not edges_after.empty:
+        complex_case = pd.DataFrame()
 
-        if "check_action" in mixed.columns:
-            mixed_created = mixed[
-                mixed["check_action"].astype(str).str.contains("mixed", case=False, regex=False)
-            ]
-            if not mixed_created.empty:
-                mixed = mixed_created
+        if "check_action" in edges_after.columns:
+            complex_case = edges_after[
+                edges_after["check_action"].astype(str).isin(["mark_complex", "create_mixed_relation"])
+            ].copy()
 
-        mixed.head(30).to_csv(CASE_MIXED_RELATION_OUT, index=False, encoding="utf-8-sig")
+        if complex_case.empty and "relation_type" in edges_after.columns:
+            complex_case = edges_after[
+                edges_after["relation_type"].astype(str) == "mixed_relation"
+            ].copy()
+
+        if complex_case.empty and "triggered_constraints" in edges_after.columns:
+            complex_case = edges_after[
+                edges_after["triggered_constraints"].astype(str).str.contains(
+                    "cooperation_conflict|multiple_cameo|multiple_conflict|material_cooperation",
+                    case=False,
+                    regex=True
+                )
+            ].copy()
+
+        complex_case.head(30).to_csv(CASE_MIXED_RELATION_OUT, index=False, encoding="utf-8-sig")
     else:
         pd.DataFrame().to_csv(CASE_MIXED_RELATION_OUT, index=False, encoding="utf-8-sig")
 
