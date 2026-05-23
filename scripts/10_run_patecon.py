@@ -95,9 +95,11 @@ def check_environment():
 def run_patecon_constraint_mining():
     """
     按 PaTeCon 原始使用方式调用 Constraint_Mining.py。
+    实时打印 PaTeCon 的运行输出，并保存日志。
     """
     cmd = [
         sys.executable,
+        "-u",
         "Constraint_Mining.py",
         f"--dataset=resource/{PATECON_DATASET_NAME}",
         f"--knowledgegraph={KNOWLEDGEGRAPH}",
@@ -109,26 +111,32 @@ def run_patecon_constraint_mining():
     print("\n========== Run PaTeCon Constraint_Mining.py ==========")
     print("[CMD]", " ".join(cmd))
 
-    result = subprocess.run(
+    log_lines = []
+
+    process = subprocess.Popen(
         cmd,
         cwd=str(PATECON_DIR),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        bufsize=1,
     )
 
-    print(result.stdout)
+    for line in process.stdout:
+        print(line, end="")
+        log_lines.append(line)
 
-    RUN_LOG_FILE.write_text(result.stdout, encoding="utf-8")
+    process.wait()
 
-    if result.returncode != 0:
+    RUN_LOG_FILE.write_text("".join(log_lines), encoding="utf-8")
+
+    if process.returncode != 0:
         raise RuntimeError(
-            f"PaTeCon Constraint_Mining.py 执行失败，returncode={result.returncode}\n"
+            f"PaTeCon Constraint_Mining.py 执行失败，returncode={process.returncode}\n"
             f"日志已保存到：{RUN_LOG_FILE}"
         )
 
     print(f"[OK] PaTeCon 运行日志已保存：{RUN_LOG_FILE}")
-
 
 def parse_constraint_line(raw_line):
     """
