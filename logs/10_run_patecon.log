@@ -1,38 +1,66 @@
-readlines running time is: 0.49678683280944824 s
-duplicate running time is: 0.02397894859313965 s
-len of file is 173089
-len of NonDuplicate utkg is 173089
-read file time: 0.6971702575683594 s
+readlines running time is: 0.6214754581451416 s
+duplicate running time is: 0.025262117385864258 s
+len of file is 267027
+len of NonDuplicate utkg is 267027
+read file time: 0.8509867191314697 s
 there are  0  facts whose start > end and they have been removed
-temporal representation running time is 0.03056049346923828 s
-len of Conflict-free utkg is 173089
-len of selected conflict free utkg is 173089
-random sample running time is: 1.33514404296875e-05 s
-constructing graph running time is: 0.28459954261779785 s
-number of entity vertex is  6796
-number of statement vertex is 173089
-len(g.temporalRelationList): 5
-g.temporalRelationList: ['material_cooperation', 'verbal_cooperation', 'verbal_conflict', 'material_conflict', 'mixed_relation']
+temporal representation running time is 0.036133527755737305 s
+len of Conflict-free utkg is 267027
+len of selected conflict free utkg is 267027
+random sample running time is: 3.838539123535156e-05 s
+constructing graph running time is: 0.4139525890350342 s
+number of entity vertex is  6666
+number of statement vertex is 267027
+len(g.temporalRelationList): 20
+g.temporalRelationList: ['02', '12', '14', '13', '08', '06', '01', '07', '05', '19', '10', '20', '16', '04', '17', '11', '15', '09', '03', '18']
 -------------------
 Mutual_Exclusion_mining......
-Mutual_Exclusion_Mining time is 0.1073603630065918 s
+Mutual_Exclusion_Mining time is 0.1276557445526123 s
 functional_mining......
-functional_mining time is 25.8010675907135 s
+functional_mining time is 7.5693039894104 s
 inverse_functional_mining......
-inverse_functional_mining time is 25.53481650352478 s
+inverse_functional_mining time is 8.229541063308716 s
 Single Entity Temporal Order Mining......
-Single Entity Temporal Order Mining time is 4.678112268447876 s
+Single Entity Temporal Order Mining time is 1215.147542476654 s
 Mutiple Entity Temporal Order Mining......
-Mutiple Entity Temporal Order Mining time is 0.0735011100769043 s
-constraint mining running time is: 56.19508624076843 s
+Mutiple Entity Temporal Order Mining time is 3669.329659461975 s
+constraint mining running time is: 4900.4047865867615 s
 Candidate Constraint list:
-(a,material_cooperation,b,t1,t2) & (a,material_cooperation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,verbal_cooperation,b,t1,t2) & (a,verbal_cooperation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,verbal_conflict,b,t1,t2) & (a,verbal_conflict,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,material_conflict,b,t1,t2) & (a,material_conflict,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,mixed_relation,b,t1,t2) & (a,mixed_relation,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,material_cooperation,b,t1,t2) & (c,material_cooperation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,verbal_cooperation,b,t1,t2) & (c,verbal_cooperation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,verbal_conflict,b,t1,t2) & (c,verbal_conflict,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,material_conflict,b,t1,t2) & (c,material_conflict,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,mixed_relation,b,t1,t2) & (c,mixed_relation,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,02,b,t1,t2) & (a,02,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,12,b,t1,t2) & (a,12,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,14,b,t1,t2) & (a,14,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,13,b,t1,t2) & (a,13,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,08,b,t1,t2) & (a,08,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,06,b,t1,t2) & (a,06,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,01,b,t1,t2) & (a,01,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,07,b,t1,t2) & (a,07,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,05,b,t1,t2) & (a,05,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,19,b,t1,t2) & (a,19,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,10,b,t1,t2) & (a,10,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,16,b,t1,t2) & (a,16,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,04,b,t1,t2) & (a,04,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,17,b,t1,t2) & (a,17,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,11,b,t1,t2) & (a,11,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,15,b,t1,t2) & (a,15,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,09,b,t1,t2) & (a,09,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,03,b,t1,t2) & (a,03,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,18,b,t1,t2) & (a,18,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,02,b,t1,t2) & (c,02,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,12,b,t1,t2) & (c,12,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,14,b,t1,t2) & (c,14,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,13,b,t1,t2) & (c,13,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,08,b,t1,t2) & (c,08,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,06,b,t1,t2) & (c,06,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,01,b,t1,t2) & (c,01,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,07,b,t1,t2) & (c,07,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,05,b,t1,t2) & (c,05,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,19,b,t1,t2) & (c,19,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,10,b,t1,t2) & (c,10,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,16,b,t1,t2) & (c,16,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,04,b,t1,t2) & (c,04,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,17,b,t1,t2) & (c,17,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,11,b,t1,t2) & (c,11,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,15,b,t1,t2) & (c,15,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,09,b,t1,t2) & (c,09,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,03,b,t1,t2) & (c,03,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,18,b,t1,t2) & (c,18,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0

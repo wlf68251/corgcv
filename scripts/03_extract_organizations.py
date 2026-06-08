@@ -133,6 +133,100 @@ BAD_NAMES = {
     "MIGRANTS",
 }
 
+# ============================================================
+# 1.1 泛化行动者过滤词
+# ============================================================
+
+GENERIC_EXACT_NAMES = {
+    # 政府 / 政治角色泛称
+    "GOVERNMENT",
+    "GOVERNMENTS",
+    "STATE",
+    "STATES",
+    "AUTHORITIES",
+    "AUTHORITY",
+    "OFFICIAL",
+    "OFFICIALS",
+    "MINISTER",
+    "MINISTERS",
+    "PRESIDENT",
+    "PRIME MINISTER",
+    "LEADER",
+    "LEADERS",
+    "KING",
+    "QUEEN",
+    "ROYAL",
+
+    # 军事 / 安全部门泛称
+    "MILITARY",
+    "ARMY",
+    "NAVY",
+    "AIR FORCE",
+    "FORCES",
+    "TROOPS",
+    "POLICE",
+    "SECURITY",
+    "INTELLIGENCE",
+    "SOLDIERS",
+
+    # 媒体 / 群体泛称
+    "MEDIA",
+    "PRESS",
+    "JOURNALIST",
+    "JOURNALISTS",
+    "NEWSPAPER",
+    "REPORTER",
+    "REPORTERS",
+
+    # 商业泛称
+    "BUSINESS",
+    "BUSINESSES",
+    "COMPANY",
+    "COMPANIES",
+    "CORPORATION",
+    "CORPORATIONS",
+    "BANK",
+    "BANKS",
+    "MARKET",
+    "MARKETS",
+
+    # 政治群体 / 社会群体泛称
+    "OPPOSITION",
+    "PARTY",
+    "PARTIES",
+    "REBEL",
+    "REBELS",
+    "SEPARATIST",
+    "SEPARATISTS",
+    "ACTIVIST",
+    "ACTIVISTS",
+    "MILITANT",
+    "MILITANTS",
+
+    # 法律 / 教育 / 宗教泛称
+    "COURT",
+    "COURTS",
+    "JUDGE",
+    "JUDGES",
+    "LAWYER",
+    "LAWYERS",
+    "LEGAL",
+    "SCHOOL",
+    "SCHOOLS",
+    "UNIVERSITY",
+    "UNIVERSITIES",
+    "RELIGIOUS",
+    "CHURCH",
+    "CHURCHES",
+}
+
+GENERIC_CODE_NAMES = {
+    "GOV", "MIL", "COP", "SPY", "JUD", "LEG",
+    "PTY", "NGO", "IGO", "BUS", "MNC",
+    "MED", "EDU", "REL", "LAB", "CRM",
+    "OPP", "CVL", "ELI", "HLH", "AGR",
+    "DEV", "REF", "INS",
+}
 
 # ============================================================
 # 2. 基础清洗函数
@@ -175,7 +269,17 @@ def is_bad_name(name):
     if not name:
         return True
 
+    name = normalize_name(name)
+
     if name in BAD_NAMES:
+        return True
+
+    # 过滤 GDELT / ICEWS 中常见的 actor type code
+    if name in GENERIC_CODE_NAMES:
+        return True
+
+    # 过滤 government / media / business / king 等完全泛化行动者
+    if name in GENERIC_EXACT_NAMES:
         return True
 
     if len(name) <= 1:
@@ -191,7 +295,6 @@ def is_bad_name(name):
         return True
 
     return False
-
 
 def split_sector(sector_text):
     """
@@ -231,10 +334,27 @@ def has_org_sector(sector_info_set):
 def has_org_name(name):
     """
     判断名称本身是否像组织。
+    注意：
+        单独的 GOVERNMENT / BANK / ARMY / MEDIA 等不算组织；
+        WORLD BANK / BANK OF JAPAN / MINISTRY OF DEFENSE 这类才算。
     """
+    name = normalize_name(name)
+
+    if is_bad_name(name):
+        return False
+
+    words = name.split()
+
     for kw in ORG_NAME_KEYWORDS:
         if kw in name:
-            return True
+            # 如果名称本身就是一个泛化关键词，不保留
+            if name == kw:
+                return False
+
+            # 多词名称中包含组织指示词，可以认为更像组织
+            if len(words) >= 2:
+                return True
+
     return False
 
 
@@ -257,11 +377,11 @@ def should_keep_as_organization(record):
     """
     判断是否优先进入 organizations.csv。
 
-    规则来自 md：
-        1. 高频
-        2. sector/type 判断
-        3. 去掉普通人群、泛称群体
-        4. 保留跨源出现
+    精细过滤原则：
+        1. 泛化行动者不进入组织表；
+        2. 跨源出现只能作为加分，不能覆盖泛化词过滤；
+        3. type/sector 只能辅助判断，不能把类别词当成组织实体；
+        4. 名称本身像组织时优先保留。
     """
     name = record["normalized_name"]
 
@@ -271,16 +391,20 @@ def should_keep_as_organization(record):
     if record["frequency"] < MIN_FREQUENCY:
         return False
 
-    if record["source_count"] >= 2:
+    # 名称本身有明显组织特征，优先保留
+    if has_org_name(name):
         return True
 
+    # 跨源出现 + 有组织类型/行业信号，才保留
+    if record["source_count"] >= 2:
+        if has_org_type(record["type_info_set"]) or has_org_sector(record["sector_info_set"]):
+            return True
+
+    # 单源但有明确组织类型或 sector 信号，也可以保留
     if has_org_type(record["type_info_set"]):
         return True
 
     if has_org_sector(record["sector_info_set"]):
-        return True
-
-    if has_org_name(name):
         return True
 
     return False
