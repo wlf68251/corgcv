@@ -1,13 +1,64 @@
 # scripts/04_align_organizations.py
+# -*- coding: utf-8 -*-
+
+"""
+04_align_organizations.py
+
+功能：
+    对 03_extract_organizations.py 生成的 organizations_raw.csv 进行组织名称规范化与实体对齐。
+
+输入：
+    ../data/processed/organizations_raw.csv
+
+输出：
+    ../data/processed/organizations.csv
+    ../data/processed/organization_aliases.csv
+
+本版修改重点：
+    1. 保留括号及括号内内容。
+       例如：
+           Head of Government (Ukraine)
+           -> HEAD OF GOVERNMENT (UKRAINE)
+
+       不再清洗成：
+           HEAD OF GOVERNMENT
+
+       原因：
+           括号内的国家/地区信息是区分不同国家同名组织、部门、职位的重要上下文。
+
+    2. 只过滤“泛化名称”，不按包含关键词过滤。
+       会过滤：
+           COLLEGE
+           UNIVERSITY
+           SCHOOL
+           CORPORATION
+           INDUSTRY
+
+       不会过滤：
+           HARVARD COLLEGE
+           UNIVERSITY OF OXFORD
+           CORPORATION FOR PUBLIC BROADCASTING
+           POLICE (ISRAEL)
+           GOVERNMENT (UKRAINE)
+
+    3. 模糊合并时，如果名称主体相同但括号限定词不同，不合并。
+       例如：
+           HEAD OF GOVERNMENT (UKRAINE)
+           HEAD OF GOVERNMENT (RUSSIA)
+       不会被合并。
+"""
+
 import os
 import re
 import pandas as pd
 
+
 PROCESSED_DIR = "../data/processed"
 
-ORGANIZATIONS_IN = os.path.join(PROCESSED_DIR, "organizations.csv")
+ORGANIZATIONS_IN = os.path.join(PROCESSED_DIR, "organizations_raw.csv")
 ORGANIZATIONS_OUT = os.path.join(PROCESSED_DIR, "organizations.csv")
 ALIASES_OUT = os.path.join(PROCESSED_DIR, "organization_aliases.csv")
+ENABLE_FUZZY_MERGE = True
 
 try:
     from rapidfuzz import fuzz
@@ -30,6 +81,7 @@ ABBREVIATION_MAP = {
     "U S": "US",
     "USA": "US",
     "PEOPLES REPUBLIC OF CHINA": "CHINA",
+    "PEOPLE S REPUBLIC OF CHINA": "CHINA",
     "PRC": "CHINA",
     "RUSSIAN FEDERATION": "RUSSIA",
     "UKRAINE GOVERNMENT": "UKRAINE",
@@ -41,15 +93,81 @@ STOP_PREFIXES = [
 ]
 
 
+GENERIC_ORG_NAMES = {
+    "COLLEGE",
+    "UNIVERSITY",
+    "SCHOOL",
+    "ACADEMY",
+    "FACULTY",
+    "CAMPUS",
+    "CORPORATION",
+    "COMPANY",
+    "INDUSTRY",
+    "BUSINESS",
+    "BANK",
+    "FIRM",
+    "ENTERPRISE",
+    "MEDIA",
+    "JOURNALISTS",
+    "JOURNALIST",
+    "CITIZENS",
+    "CITIZEN",
+    "CIVILIANS",
+    "CIVILIAN",
+    "PEOPLE",
+    "PUBLIC",
+    "STUDENTS",
+    "STUDENT",
+    "GOVERNMENT",
+    "MILITARY",
+    "POLICE",
+    "ARMY",
+    "NAVY",
+    "AIR FORCE",
+    "PARLIAMENT",
+    "CONGRESS",
+    "SENATE",
+    "COURT",
+    "JUDICIARY",
+    "MINISTRY",
+    "CABINET",
+    "OPPOSITION",
+    "REBELS",
+    "REBEL",
+    "PROTESTERS",
+    "PROTESTER",
+    "PARTY",
+    "NGO",
+}
+
+
 def clean_name(name):
+    """
+    清洗组织名称，但保留括号及括号内内容。
+
+    示例：
+        Head of Government (Ukraine)
+        -> HEAD OF GOVERNMENT (UKRAINE)
+
+        Police (Israel)
+        -> POLICE (ISRAEL)
+    """
     if pd.isna(name):
         return ""
 
     name = str(name).upper().strip()
 
-    name = re.sub(r"\(.*?\)", " ", name)
-    name = re.sub(r"\[.*?\]", " ", name)
-    name = re.sub(r"[^A-Z0-9\s]", " ", name)
+    name = name.replace("[", "(").replace("]", ")")
+    name = name.replace("{", "(").replace("}", ")")
+
+    name = re.sub(r"[^A-Z0-9\s\(\)]", " ", name)
+
+    name = re.sub(r"\s+", " ", name).strip()
+    name = re.sub(r"\s+\)", ")", name)
+    name = re.sub(r"\(\s+", "(", name)
+    name = re.sub(r"\s+\(", " (", name)
+
+    name = re.sub(r"\(\s*\)", " ", name)
     name = re.sub(r"\s+", " ", name).strip()
 
     for p in STOP_PREFIXES:
@@ -60,6 +178,53 @@ def clean_name(name):
         name = ABBREVIATION_MAP[name]
 
     return name
+
+
+def normalize_generic_check_name(name):
+    return clean_name(name)
+
+
+def is_generic_org_name(name):
+    """
+    只过滤完全等于泛化名称的候选。
+
+    会过滤：
+        COLLEGE
+        UNIVERSITY
+        CORPORATION
+
+    不会过滤：
+        HARVARD COLLEGE
+        UNIVERSITY OF OXFORD
+        GOVERNMENT (UKRAINE)
+        POLICE (ISRAEL)
+    """
+    text = normalize_generic_check_name(name)
+
+    if not text:
+        return False
+
+    return text in GENERIC_ORG_NAMES
+
+
+def should_filter_org(row):
+    """
+    只检查主名称字段是否为泛化名称。
+
+    不检查 all_raw_names，避免某个别名是 COLLEGE 时误删具体组织。
+    """
+    for col in [
+        "canonical_name",
+        "raw_name",
+        "normalized_name",
+        "clean_name",
+    ]:
+        if col in row.index:
+            value = row.get(col, "")
+            if is_generic_org_name(value):
+                return True
+
+    return False
 
 
 def split_aliases(raw):
@@ -76,18 +241,80 @@ def split_aliases(raw):
     return parts
 
 
+def extract_parentheses_content(name):
+    if not name:
+        return set()
+
+    items = re.findall(r"\((.*?)\)", str(name))
+    return {x.strip().upper() for x in items if x.strip()}
+
+
+def remove_parentheses_content(name):
+    if not name:
+        return ""
+
+    text = re.sub(r"\(.*?\)", " ", str(name))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def should_skip_fuzzy_merge(name_i, name_j):
+    """
+    括号限定词不同，不进行模糊合并。
+    """
+    name_i = str(name_i).strip()
+    name_j = str(name_j).strip()
+
+    if not name_i or not name_j:
+        return True
+
+    par_i = extract_parentheses_content(name_i)
+    par_j = extract_parentheses_content(name_j)
+
+    base_i = remove_parentheses_content(name_i)
+    base_j = remove_parentheses_content(name_j)
+
+    if base_i == base_j and par_i and par_j and par_i != par_j:
+        return True
+
+    if base_i == base_j and ((par_i and not par_j) or (par_j and not par_i)):
+        return True
+
+    return False
+
+
 def main():
     if not os.path.exists(ORGANIZATIONS_IN):
         print(f"未找到文件: {ORGANIZATIONS_IN}")
         print("请先运行 scripts/03_extract_organizations.py")
         return
 
-    orgs = pd.read_csv(ORGANIZATIONS_IN, low_memory=False)
+    orgs = pd.read_csv(ORGANIZATIONS_IN, dtype=str, low_memory=False).fillna("")
 
     if "canonical_name" not in orgs.columns:
-        orgs["canonical_name"] = orgs["raw_name"]
+        if "raw_name" in orgs.columns:
+            orgs["canonical_name"] = orgs["raw_name"]
+        else:
+            orgs["canonical_name"] = ""
+
+    if "raw_name" not in orgs.columns:
+        orgs["raw_name"] = orgs["canonical_name"]
+
+    if "org_id" not in orgs.columns:
+        orgs.insert(0, "org_id", ["ORG_%06d" % (i + 1) for i in range(len(orgs))])
 
     orgs["clean_name"] = orgs["canonical_name"].apply(clean_name)
+
+    before_filter_count = len(orgs)
+
+    filter_mask = orgs.apply(should_filter_org, axis=1)
+    filtered_orgs = orgs[filter_mask].copy()
+    orgs = orgs[~filter_mask].copy()
+
+    print("泛化组织名称过滤完成")
+    print("过滤前组织数量:", before_filter_count)
+    print("过滤掉数量:", len(filtered_orgs))
+    print("过滤后组织数量:", len(orgs))
 
     exact_map = {}
     kept_rows = []
@@ -116,6 +343,9 @@ def main():
 
         for alias in alias_names:
             if alias and alias.lower() != "nan":
+                if is_generic_org_name(alias):
+                    continue
+
                 alias_rows.append({
                     "old_org_id": main_old_id,
                     "alias": alias,
@@ -129,8 +359,7 @@ def main():
         print("对齐后组织为空，请检查 organizations.csv")
         return
 
-    # 可选：非常保守的模糊合并
-    if HAS_RAPIDFUZZ:
+    if ENABLE_FUZZY_MERGE and HAS_RAPIDFUZZ:
         print("检测到 RapidFuzz，执行保守模糊合并...")
 
         aligned = aligned.reset_index(drop=True)
@@ -156,8 +385,10 @@ def main():
                 if not name_i or not name_j:
                     continue
 
-                # 名称太短不模糊合并，避免 US、UN 等误合并
                 if len(name_i) < 8 or len(name_j) < 8:
+                    continue
+
+                if should_skip_fuzzy_merge(name_i, name_j):
                     continue
 
                 score = fuzz.token_sort_ratio(name_i, name_j)
@@ -175,7 +406,6 @@ def main():
 
         aligned = aligned[~aligned["org_id"].isin(remove_old_ids)].copy()
 
-        # 同步 alias old_org_id
         for row in alias_rows:
             oid = row["old_org_id"]
             if oid in redirect:

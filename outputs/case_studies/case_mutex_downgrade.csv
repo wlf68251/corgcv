@@ -1,0 +1,1 @@
+﻿decision_id,constraint_id,constraint_key,subject_org_id,object_org_id,month,edge_id,relation_type,final_status,update_action,original_confidence,final_confidence,reason,patecon_confidence,source_weighted_confidence,violation_rate,auto_filter_status,candidate_level

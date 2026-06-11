@@ -1,0 +1,95 @@
+[2026-06-09 14:46:03] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-09 14:46:04] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-09 14:46:04] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-09 14:46:04] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-09 14:46:04] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-09 14:46:05] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-09 14:46:05] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-09 14:46:05] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-09 14:46:11] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-09 14:46:12] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-09 14:46:13] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-09 14:46:13] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-09 14:46:13] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-09 14:46:13] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-09 14:46:13] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-09 14:46:13] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-09 14:46:36] [OK] 已保存 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=4615
+[2026-06-09 14:46:36] [STAT] LLM raw candidates: 9
+[2026-06-09 14:46:36] [STAT] kept candidates: 9
+[2026-06-09 14:46:36] [STAT] filtered candidates: 0
+[2026-06-09 14:46:36] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-09 14:46:36] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-09 14:46:36] ========== 第 09 步完成 ==========
+[2026-06-10 12:03:40] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-10 12:03:40] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-10 12:03:41] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-10 12:03:41] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-10 12:03:58] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-10 12:03:58] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-10 12:03:59] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-10 12:03:59] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-10 12:03:59] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-10 12:05:16] [OK] 已保存 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=11276
+[2026-06-10 12:05:16] [STAT] LLM raw candidates: 17
+[2026-06-10 12:05:16] [STAT] kept candidates: 17
+[2026-06-10 12:05:16] [STAT] filtered candidates: 0
+[2026-06-10 12:05:16] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-10 12:05:16] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-10 12:05:16] ========== 第 09 步完成 ==========
+[2026-06-10 13:25:31] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-10 13:25:32] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-10 13:25:32] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-10 13:25:33] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-10 13:25:49] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-10 13:25:49] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-10 13:25:50] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-10 13:25:50] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-10 13:25:50] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-10 13:30:49] [OK] 已保存 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=36411
+[2026-06-10 13:30:49] [STAT] LLM raw candidates: 0
+[2026-06-10 13:30:49] [STAT] kept candidates: 0
+[2026-06-10 13:30:49] [STAT] filtered candidates: 0
+[2026-06-10 13:30:49] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-10 13:30:49] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-10 13:30:49] [WARN] 没有保留下来的候选互斥约束。
+[2026-06-10 13:30:49] [WARN] 如果使用 --no_llm，这是正常的。
+[2026-06-10 13:30:49] [WARN] 如果已调用 LLM，请检查 mutual_exclusion_raw_response.txt 是否为合法 JSON 数组。
+[2026-06-10 13:30:49] ========== 第 09 步完成 ==========
+[2026-06-10 14:29:31] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-10 14:29:31] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-10 14:29:32] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-10 14:29:32] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-10 14:29:47] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-10 14:29:47] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-10 14:29:48] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-10 14:29:48] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-10 14:29:48] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-10 14:30:26] [OK] 已保存 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=6087
+[2026-06-10 14:30:26] [STAT] LLM raw candidates: 10
+[2026-06-10 14:30:26] [STAT] kept candidates: 9
+[2026-06-10 14:30:26] [STAT] filtered candidates: 1
+[2026-06-10 14:30:26] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-10 14:30:26] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-10 14:30:26] ========== 第 09 步完成 ==========
+[2026-06-10 15:39:07] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-10 15:39:08] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-10 15:39:08] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-10 15:39:08] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-10 15:39:16] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-10 15:39:16] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-10 15:39:17] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-10 15:39:17] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-10 15:39:35] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-10 15:39:35] [OK] 已生成候选互斥关系对池: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/candidate_mutex_pair_pool_for_llm.csv, rows=51
+[2026-06-10 15:39:35] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-10 15:39:36] [INFO] 正在调用 LLM 生成候选互斥约束...
+[2026-06-10 15:39:36] [INFO] BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+[2026-06-10 15:39:36] [INFO] MODEL_NAME: qwen-turbo
+[2026-06-10 15:40:25] [OK] 已保存/读取 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=6958
+[2026-06-10 15:40:25] [STAT] LLM raw candidates: 10
+[2026-06-10 15:40:25] [STAT] kept candidates: 10
+[2026-06-10 15:40:25] [STAT] filtered candidates: 0
+[2026-06-10 15:40:25] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-10 15:40:25] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-10 15:40:25] ========== 第 09 步完成 ==========

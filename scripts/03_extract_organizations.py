@@ -13,7 +13,7 @@
 
 输出：
     ../data/processed/actor_candidates.csv
-    ../data/processed/organizations.csv
+    ../data/processed/organizations_raw.csv
 
 运行：
     python ./03_extract_organizations.py
@@ -35,7 +35,7 @@ GDELT_PATH = Path("../data/raw/gdelt/gdelt_raw_events.csv")
 
 OUT_DIR = Path("../data/processed")
 ACTOR_CANDIDATES_PATH = OUT_DIR / "actor_candidates.csv"
-ORGANIZATIONS_PATH = OUT_DIR / "organizations.csv"
+ORGANIZATIONS_PATH = OUT_DIR / "organizations_raw.csv"
 
 CHUNKSIZE = 100000
 
@@ -375,7 +375,7 @@ def should_keep_as_candidate(record):
 
 def should_keep_as_organization(record):
     """
-    判断是否优先进入 organizations.csv。
+    判断是否优先进入 organizations_raw.csv。
 
     精细过滤原则：
         1. 泛化行动者不进入组织表；
@@ -701,7 +701,7 @@ def save_actor_candidates(df):
 
 
 # ============================================================
-# 7. 输出 organizations.csv
+# 7. 输出 organizations_raw.csv
 # ============================================================
 
 def save_organizations(df):
@@ -802,7 +802,7 @@ def save_organizations(df):
         encoding="utf-8-sig",
     )
 
-    print(f"[OK] organizations.csv: {ORGANIZATIONS_PATH}")
+    print(f"[OK] organizations_raw.csv: {ORGANIZATIONS_PATH}")
     print(f"[STAT] organizations rows: {len(org_df)}")
 
     return org_df

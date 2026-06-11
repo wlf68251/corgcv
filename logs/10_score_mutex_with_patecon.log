@@ -1,0 +1,26 @@
+[2026-06-11 02:27:17] ========== 第 10 步：为 LLM 候选互斥约束计算 PaTeCon-style 置信度 ==========
+[2026-06-11 02:27:17] [INFO] Project root: /mnt/c/Users/onlyif/Desktop/new/project
+[2026-06-11 02:27:17] [INFO] Intervals: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/org_relation_intervals.tsv
+[2026-06-11 02:27:17] [INFO] Candidates: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-11 02:27:17] [INFO] Edges: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv
+[2026-06-11 02:27:20] [OK] 有效关系区间 rows=151378
+[2026-06-11 02:27:20] [OK] 读取区间: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/org_relation_intervals.tsv, rows=151378
+[2026-06-11 02:27:20] [OK] 读取 LLM 候选约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv, rows=10
+[2026-06-11 02:27:21] [OK] 读取关系边用于来源加权: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-11 02:27:25] [OK] 已构建来源权重映射 keys=122059
+[2026-06-11 02:27:35] [STAT] same_subject_object pair groups: 77771
+[2026-06-11 02:28:33] [SCORE] LLM_MUTEX_0001 08 vs 17 instantiation=1724 support=1193 negative=531 confidence=0.691995 weighted_conf=0.690783 violation_rate=0.308005 status=weak_review
+[2026-06-11 02:29:28] [SCORE] LLM_MUTEX_0002 08 vs 19 instantiation=1432 support=1025 negative=407 confidence=0.715782 weighted_conf=0.715679 violation_rate=0.284218 status=review
+[2026-06-11 02:30:35] [SCORE] LLM_MUTEX_0003 07 vs 19 instantiation=818 support=584 negative=234 confidence=0.713936 weighted_conf=0.713817 violation_rate=0.286064 status=review
+[2026-06-11 02:31:39] [SCORE] LLM_MUTEX_0004 06 vs 19 instantiation=761 support=564 negative=197 confidence=0.74113 weighted_conf=0.73924 violation_rate=0.25887 status=strong_soft
+[2026-06-11 02:32:30] [SCORE] LLM_MUTEX_0005 04 vs 11 instantiation=8186 support=5893 negative=2293 confidence=0.719888 weighted_conf=0.716892 violation_rate=0.280112 status=review
+[2026-06-11 02:33:35] [SCORE] LLM_MUTEX_0006 05 vs 11 instantiation=5142 support=3663 negative=1479 confidence=0.712369 weighted_conf=0.710554 violation_rate=0.287631 status=review
+[2026-06-11 02:34:30] [SCORE] LLM_MUTEX_0007 04 vs 19 instantiation=4038 support=2905 negative=1133 confidence=0.719416 weighted_conf=0.721743 violation_rate=0.280584 status=review
+[2026-06-11 02:35:23] [SCORE] LLM_MUTEX_0008 04 vs 17 instantiation=3943 support=2828 negative=1115 confidence=0.71722 weighted_conf=0.716729 violation_rate=0.28278 status=review
+[2026-06-11 02:36:28] [SCORE] LLM_MUTEX_0009 03 vs 11 instantiation=3810 support=2756 negative=1054 confidence=0.72336 weighted_conf=0.720119 violation_rate=0.27664 status=review
+[2026-06-11 02:37:16] [SCORE] LLM_MUTEX_0010 05 vs 19 instantiation=2259 support=1640 negative=619 confidence=0.725985 weighted_conf=0.724169 violation_rate=0.274015 status=mixed_candidate
+[2026-06-11 02:37:16] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_scored.csv, rows=10
+[2026-06-11 02:37:16] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_trigger_instances.csv, rows=28785
+[2026-06-11 02:37:16] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_violation_instances.csv, rows=9062
+[2026-06-11 02:37:16] [STAT] auto_filter_status 分布: {'review': 7, 'weak_review': 1, 'strong_soft': 1, 'mixed_candidate': 1}
+[2026-06-11 02:37:16] ========== 第 10 步完成 ==========

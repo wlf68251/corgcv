@@ -1,66 +1,66 @@
-readlines running time is: 0.6214754581451416 s
-duplicate running time is: 0.025262117385864258 s
-len of file is 267027
-len of NonDuplicate utkg is 267027
-read file time: 0.8509867191314697 s
+readlines running time is: 0.3568692207336426 s
+duplicate running time is: 0.011472702026367188 s
+len of file is 151378
+len of NonDuplicate utkg is 151378
+read file time: 0.45841026306152344 s
 there are  0  facts whose start > end and they have been removed
-temporal representation running time is 0.036133527755737305 s
-len of Conflict-free utkg is 267027
-len of selected conflict free utkg is 267027
-random sample running time is: 3.838539123535156e-05 s
-constructing graph running time is: 0.4139525890350342 s
-number of entity vertex is  6666
-number of statement vertex is 267027
+temporal representation running time is 0.02140021324157715 s
+len of Conflict-free utkg is 151378
+len of selected conflict free utkg is 151378
+random sample running time is: 4.6253204345703125e-05 s
+constructing graph running time is: 0.2083892822265625 s
+number of entity vertex is  6219
+number of statement vertex is 151378
 len(g.temporalRelationList): 20
-g.temporalRelationList: ['02', '12', '14', '13', '08', '06', '01', '07', '05', '19', '10', '20', '16', '04', '17', '11', '15', '09', '03', '18']
+g.temporalRelationList: ['10', '05', '20', '12', '14', '15', '03', '02', '08', '16', '09', '11', '01', '13', '04', '06', '17', '18', '07', '19']
 -------------------
 Mutual_Exclusion_mining......
-Mutual_Exclusion_Mining time is 0.1276557445526123 s
+Mutual_Exclusion_Mining time is 0.07198047637939453 s
 functional_mining......
-functional_mining time is 7.5693039894104 s
+functional_mining time is 5.45829176902771 s
 inverse_functional_mining......
-inverse_functional_mining time is 8.229541063308716 s
+inverse_functional_mining time is 5.698679685592651 s
 Single Entity Temporal Order Mining......
-Single Entity Temporal Order Mining time is 1215.147542476654 s
+Single Entity Temporal Order Mining time is 6.5165746212005615 s
 Mutiple Entity Temporal Order Mining......
-Mutiple Entity Temporal Order Mining time is 3669.329659461975 s
-constraint mining running time is: 4900.4047865867615 s
+Mutiple Entity Temporal Order Mining time is 559.7992372512817 s
+constraint mining running time is: 577.5455341339111 s
 Candidate Constraint list:
-(a,02,b,t1,t2) & (a,02,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,10,b,t1,t2) & (a,10,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,05,b,t1,t2) & (a,05,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,12,b,t1,t2) & (a,12,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,14,b,t1,t2) & (a,14,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,13,b,t1,t2) & (a,13,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,08,b,t1,t2) & (a,08,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,06,b,t1,t2) & (a,06,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,01,b,t1,t2) & (a,01,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,07,b,t1,t2) & (a,07,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,05,b,t1,t2) & (a,05,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,19,b,t1,t2) & (a,19,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,10,b,t1,t2) & (a,10,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,16,b,t1,t2) & (a,16,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,04,b,t1,t2) & (a,04,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,17,b,t1,t2) & (a,17,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,11,b,t1,t2) & (a,11,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,15,b,t1,t2) & (a,15,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,09,b,t1,t2) & (a,09,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,03,b,t1,t2) & (a,03,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,02,b,t1,t2) & (a,02,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,08,b,t1,t2) & (a,08,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,16,b,t1,t2) & (a,16,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,09,b,t1,t2) & (a,09,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,11,b,t1,t2) & (a,11,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,01,b,t1,t2) & (a,01,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,13,b,t1,t2) & (a,13,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,04,b,t1,t2) & (a,04,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,06,b,t1,t2) & (a,06,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,17,b,t1,t2) & (a,17,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,18,b,t1,t2) & (a,18,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,02,b,t1,t2) & (c,02,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,07,b,t1,t2) & (a,07,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,19,b,t1,t2) & (a,19,c,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,10,b,t1,t2) & (c,10,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,05,b,t1,t2) & (c,05,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,12,b,t1,t2) & (c,12,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,14,b,t1,t2) & (c,14,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,13,b,t1,t2) & (c,13,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,08,b,t1,t2) & (c,08,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,06,b,t1,t2) & (c,06,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,01,b,t1,t2) & (c,01,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,07,b,t1,t2) & (c,07,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,05,b,t1,t2) & (c,05,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,19,b,t1,t2) & (c,19,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,10,b,t1,t2) & (c,10,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,16,b,t1,t2) & (c,16,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,04,b,t1,t2) & (c,04,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,17,b,t1,t2) & (c,17,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,11,b,t1,t2) & (c,11,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,15,b,t1,t2) & (c,15,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
-(a,09,b,t1,t2) & (c,09,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,03,b,t1,t2) & (c,03,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,02,b,t1,t2) & (c,02,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,08,b,t1,t2) & (c,08,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,16,b,t1,t2) & (c,16,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,09,b,t1,t2) & (c,09,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,11,b,t1,t2) & (c,11,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,01,b,t1,t2) & (c,01,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,13,b,t1,t2) & (c,13,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,04,b,t1,t2) & (c,04,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,06,b,t1,t2) & (c,06,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,17,b,t1,t2) & (c,17,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
 (a,18,b,t1,t2) & (c,18,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,07,b,t1,t2) & (c,07,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
+(a,19,b,t1,t2) & (c,19,b,t3,t4) => disjoint(t1,t2,t3,t4)|1.0
