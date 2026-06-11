@@ -1,96 +1,159 @@
 # app/app.py
+# -*- coding: utf-8 -*-
+
+"""
+组织关系图谱校验更新可视化系统。
+
+页面：
+1. 总览页
+2. 时间轴图谱页
+3. 互斥约束页
+4. 冲突列表页
+5. 案例页
+
+改动重点：
+1. 不要求修改 11_update_graph.py。
+2. 直接读取 relation_edges_after_check.csv 中的 subject_name / object_name。
+3. 在 app 层把 ORG_000XXX 显示为真实组织名称。
+4. 边关系显示中文实际含义，例如 04 -> 协商磋商，19 -> 军事冲突。
+5. 保持 ECharts 连接字段 source / target 仍然使用 ORG_ID，避免图谱消失。
+
+运行：
+    streamlit run app/app.py
+"""
+
 import os
-import math
-import tempfile
+import json
+from typing import Any, Dict, List, Tuple
+
 import pandas as pd
 import streamlit as st
-import networkx as nx
-from pyvis.network import Network
+
+try:
+    from streamlit_echarts import st_echarts
+    HAS_ECHARTS = True
+except Exception:
+    HAS_ECHARTS = False
 
 
-# =========================
-# 路径配置
-# =========================
+def detect_project_root() -> str:
+    here = os.path.abspath(os.path.dirname(__file__))
+    parent = os.path.abspath(os.path.join(here, ".."))
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(APP_DIR)
+    if os.path.exists(os.path.join(parent, "data", "processed")):
+        return parent
 
-DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
-OUTPUTS_DIR = os.path.join(PROJECT_DIR, "outputs")
+    if os.path.exists(os.path.join(here, "data", "processed")):
+        return here
 
-ORGANIZATIONS_FILE = os.path.join(DATA_DIR, "organizations.csv")
-ALIASES_FILE = os.path.join(DATA_DIR, "organization_aliases.csv")
-
-EVENT_FACTS_FILE = os.path.join(DATA_DIR, "event_facts.csv")
-SOURCE_EVIDENCE_FILE = os.path.join(DATA_DIR, "source_evidence.csv")
-
-RELATION_EDGES_BEFORE_FILE = os.path.join(DATA_DIR, "relation_edges_before_check.csv")
-RELATION_EDGES_SCORED_FILE = os.path.join(DATA_DIR, "relation_edges_scored.csv")
-RELATION_EDGES_AFTER_FILE = os.path.join(DATA_DIR, "relation_edges_after_check.csv")
-
-TEMPORAL_CONSTRAINTS_FINAL_FILE = os.path.join(DATA_DIR, "temporal_constraints_final.csv")
-DETECTED_CONFLICTS_FILE = os.path.join(DATA_DIR, "detected_conflicts.csv")
-
-EVALUATION_SUMMARY_FILE = os.path.join(
-    OUTPUTS_DIR,
-    "evaluation_tables",
-    "evaluation_summary.csv"
-)
+    return parent
 
 
-# =========================
-# 页面配置
-# =========================
+PROJECT_ROOT = detect_project_root()
+PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
+CASE_DIR = os.path.join(OUTPUTS_DIR, "case_studies")
 
-st.set_page_config(
-    page_title="组织机构复杂关系图谱可视化",
-    layout="wide"
-)
+TIMELINE_JSON = os.path.join(PROCESSED_DIR, "timeline_graph_data.json")
+EDGES_AFTER = os.path.join(PROCESSED_DIR, "relation_edges_after_check.csv")
+FINAL_CONSTRAINTS = os.path.join(PROCESSED_DIR, "mutual_exclusion_constraints_final.csv")
+CONFLICTS = os.path.join(PROCESSED_DIR, "mutual_exclusion_conflicts.csv")
+DECISIONS = os.path.join(PROCESSED_DIR, "update_decisions.csv")
+
+EDGE_BOOL=False
 
 
-# =========================
-# 工具函数
-# =========================
+STATUS_COLORS = {
+    "keep": "#4caf50",
+    "downgraded": "#ff9800",
+    "hidden": "#9e9e9e",
+    "mark_mixed": "#7e57c2",
+    "review": "#f44336",
+}
+
+
+RELATION_ZH = {
+    "01": "公开声明",
+    "02": "呼吁请求",
+    "03": "表达合作意愿",
+    "04": "协商磋商",
+    "05": "外交合作",
+    "06": "实质合作",
+    "07": "提供援助",
+    "08": "让步妥协",
+    "09": "调查询问",
+    "10": "要求施压",
+    "11": "反对批评",
+    "12": "拒绝合作",
+    "13": "威胁警告",
+    "14": "抗议冲突",
+    "15": "非常规暴力",
+    "16": "制裁断交",
+    "17": "强制行动",
+    "18": "军事攻击",
+    "19": "军事冲突",
+    "20": "战争暴力",
+
+    "verbal_cooperation": "言语合作",
+    "material_cooperation": "实质合作",
+    "verbal_conflict": "言语冲突",
+    "material_conflict": "实质冲突",
+    "mixed_relation": "混合关系",
+}
+
+
+ACTION_ZH = {
+    "keep": "保留",
+    "review": "人工复核",
+    "mark_mixed": "标记复杂关系",
+    "downgrade": "置信度降权",
+    "hide_low_evidence": "隐藏低证据边",
+    "hide": "隐藏",
+}
+
+
+def normalize_relation_type(x: Any) -> str:
+    if pd.isna(x):
+        return ""
+
+    s = str(x).strip()
+
+    if s.endswith(".0"):
+        s = s[:-2]
+
+    if s.isdigit() and len(s) == 1:
+        s = "0" + s
+
+    return s
+
+
+def relation_label(x: Any) -> str:
+    r = normalize_relation_type(x)
+    return RELATION_ZH.get(r, r)
+
+
+def action_label(x: Any) -> str:
+    s = str(x).strip()
+    return ACTION_ZH.get(s, s)
+
 
 @st.cache_data
-def read_csv_if_exists(path):
+def load_csv(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame()
-
-    try:
-        return pd.read_csv(path, low_memory=False)
-    except Exception as e:
-        st.warning(f"读取文件失败: {path}\n错误: {e}")
-        return pd.DataFrame()
+    return pd.read_csv(path, low_memory=False)
 
 
 @st.cache_data
-def load_all_data():
-    data = {
-        "organizations": read_csv_if_exists(ORGANIZATIONS_FILE),
-        "aliases": read_csv_if_exists(ALIASES_FILE),
-        "event_facts": read_csv_if_exists(EVENT_FACTS_FILE),
-        "source_evidence": read_csv_if_exists(SOURCE_EVIDENCE_FILE),
-        "edges_before": read_csv_if_exists(RELATION_EDGES_BEFORE_FILE),
-        "edges_scored": read_csv_if_exists(RELATION_EDGES_SCORED_FILE),
-        "edges_after": read_csv_if_exists(RELATION_EDGES_AFTER_FILE),
-        "constraints": read_csv_if_exists(TEMPORAL_CONSTRAINTS_FINAL_FILE),
-        "conflicts": read_csv_if_exists(DETECTED_CONFLICTS_FILE),
-        "evaluation_summary": read_csv_if_exists(EVALUATION_SUMMARY_FILE),
-    }
-    return data
+def load_timeline_json(path: str) -> Dict[str, Any]:
+    if not os.path.exists(path):
+        return {"months": [], "graphs": {}}
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def safe_int(x, default=0):
-    try:
-        if pd.isna(x):
-            return default
-        return int(float(x))
-    except Exception:
-        return default
-
-
-def safe_float(x, default=0.0):
+def safe_float(x: Any, default: float = 0.0) -> float:
     try:
         if pd.isna(x):
             return default
@@ -99,687 +162,682 @@ def safe_float(x, default=0.0):
         return default
 
 
-def get_org_name_map(orgs):
-    if orgs.empty or "org_id" not in orgs.columns:
-        return {}
+def metric_card(label: str, value: Any) -> None:
+    st.metric(label, value)
 
-    name_col = "canonical_name" if "canonical_name" in orgs.columns else "raw_name"
 
-    if name_col not in orgs.columns:
-        return {str(r["org_id"]): str(r["org_id"]) for _, r in orgs.iterrows()}
+def get_unique_values(df: pd.DataFrame, col: str) -> List[str]:
+    if df.empty or col not in df.columns:
+        return []
+    vals = df[col].dropna().astype(str).unique().tolist()
+    return sorted(vals)
 
-    return {
-        str(r["org_id"]): str(r[name_col])
-        for _, r in orgs.iterrows()
+
+def build_display_maps(edges: pd.DataFrame) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    从 relation_edges_after_check.csv 构造展示映射。
+
+    返回：
+        org_name_map:
+            ORG_000001 -> China
+        relation_label_map:
+            04 -> 协商磋商
+    """
+    org_name_map: Dict[str, str] = {}
+    relation_label_map: Dict[str, str] = {}
+
+    if edges.empty:
+        return org_name_map, relation_label_map
+
+    if {"subject_org_id", "subject_name"}.issubset(edges.columns):
+        for _, r in edges[["subject_org_id", "subject_name"]].dropna().iterrows():
+            org_id = str(r["subject_org_id"]).strip()
+            name = str(r["subject_name"]).strip()
+            if org_id and name and name.lower() != "nan":
+                org_name_map[org_id] = name
+
+    if {"object_org_id", "object_name"}.issubset(edges.columns):
+        for _, r in edges[["object_org_id", "object_name"]].dropna().iterrows():
+            org_id = str(r["object_org_id"]).strip()
+            name = str(r["object_name"]).strip()
+            if org_id and name and name.lower() != "nan":
+                org_name_map[org_id] = name
+
+    relation_col = ""
+    for c in ["_relation", "relation_type", "relation_code"]:
+        if c in edges.columns:
+            relation_col = c
+            break
+
+    if relation_col:
+        for rel in edges[relation_col].dropna().unique().tolist():
+            rel_norm = normalize_relation_type(rel)
+            relation_label_map[rel_norm] = relation_label(rel_norm)
+
+    return org_name_map, relation_label_map
+
+
+def enrich_timeline_data(
+    timeline_data: Dict[str, Any],
+    org_name_map: Dict[str, str],
+    relation_label_map: Dict[str, str],
+) -> Dict[str, Any]:
+    """
+    不改变图谱连接结构，只增强显示字段。
+
+    关键规则：
+        node.id 不改，仍然是 ORG_ID；
+        node.name 改成真实名称；
+        link.source / link.target 不改，仍然是 ORG_ID；
+        link.source_name / link.target_name 增加真实名称；
+        link.relation_label 增加中文关系名。
+    """
+    data = json.loads(json.dumps(timeline_data, ensure_ascii=False))
+    graphs = data.get("graphs", {})
+
+    for month, graph in graphs.items():
+        nodes = graph.get("nodes", [])
+        links = graph.get("links", [])
+
+        for n in nodes:
+            node_id = str(n.get("id", "")).strip()
+            display_name = org_name_map.get(node_id, n.get("name", node_id))
+
+            if not display_name or str(display_name).lower() == "nan":
+                display_name = node_id
+
+            n["name"] = display_name
+            n["org_id"] = node_id
+
+        for link in links:
+            source_id = str(link.get("source", "")).strip()
+            target_id = str(link.get("target", "")).strip()
+
+            source_name = org_name_map.get(source_id, source_id)
+            target_name = org_name_map.get(target_id, target_id)
+
+            rel = normalize_relation_type(link.get("relation", link.get("relation_code", "")))
+            rel_label = relation_label_map.get(rel, relation_label(rel))
+
+            link["source_org_id"] = source_id
+            link["target_org_id"] = target_id
+            link["source_name"] = source_name
+            link["target_name"] = target_name
+            link["relation"] = rel
+            link["relation_code"] = rel
+            link["relation_label"] = rel_label
+            link["edge_label"] = rel_label
+            link["update_action_label"] = action_label(link.get("update_action", link.get("status", "keep")))
+
+    return data
+
+
+def filter_links(
+    links: List[Dict[str, Any]],
+    relation_types: List[str],
+    actions: List[str],
+    min_confidence: float,
+    only_triggered: bool,
+    only_cross_source: bool,
+    keyword: str,
+) -> List[Dict[str, Any]]:
+    result = []
+    kw = str(keyword or "").strip().lower()
+
+    for link in links:
+        relation = normalize_relation_type(link.get("relation", ""))
+        relation_zh = str(link.get("relation_label", relation_label(relation)))
+
+        action = str(link.get("update_action", link.get("status", "keep")))
+        action_zh = str(link.get("update_action_label", action_label(action)))
+
+        conf = safe_float(link.get("confidence", 0.0), 0.0)
+        triggered = bool(link.get("is_mutex_triggered", False))
+        sources = str(link.get("sources", "")).upper()
+
+        source_name = str(link.get("source_name", link.get("source", "")))
+        target_name = str(link.get("target_name", link.get("target", "")))
+
+        if relation_types and relation not in relation_types:
+            continue
+
+        if actions and action not in actions and action_zh not in actions:
+            continue
+
+        if conf < min_confidence:
+            continue
+
+        if only_triggered and not triggered:
+            continue
+
+        if only_cross_source and not ("ICEWS" in sources and "GDELT" in sources):
+            continue
+
+        if kw:
+            searchable = " ".join([
+                source_name,
+                target_name,
+                str(link.get("source_org_id", "")),
+                str(link.get("target_org_id", "")),
+                relation,
+                relation_zh,
+                action,
+                action_zh,
+            ]).lower()
+
+            if kw not in searchable:
+                continue
+
+        result.append(link)
+
+    return result
+
+
+def build_echarts_option(
+    timeline_data: Dict[str, Any],
+    selected_months: List[str],
+    relation_types: List[str],
+    actions: List[str],
+    min_confidence: float,
+    only_triggered: bool,
+    only_cross_source: bool,
+    keyword: str,
+    show_edge_label: bool,
+) -> Dict[str, Any]:
+    
+    all_months = timeline_data.get("months", [])
+    graphs = timeline_data.get("graphs", {})
+
+    months = selected_months if selected_months else all_months
+    options = []
+
+    for month in months:
+        graph = graphs.get(month, {"nodes": [], "links": []})
+
+        links = filter_links(
+            graph.get("links", []),
+            relation_types=relation_types,
+            actions=actions,
+            min_confidence=min_confidence,
+            only_triggered=only_triggered,
+            only_cross_source=only_cross_source,
+            keyword=keyword,
+        )
+
+        node_ids = set()
+        for link in links:
+            node_ids.add(str(link.get("source", "")))
+            node_ids.add(str(link.get("target", "")))
+
+        nodes = []
+        for n in graph.get("nodes", []):
+            if str(n.get("id", "")) in node_ids:
+                display_name = str(n.get("name", n.get("id", "")))
+
+                nodes.append({
+                    **n,
+                    "label": {
+                        "show": True,
+                        "formatter": display_name,
+                        "fontSize": 10,
+                    },
+                    "tooltip": {
+                        "formatter": (
+                            f"组织名称：{display_name}<br/>"
+                            f"组织ID：{n.get('org_id', n.get('id', ''))}<br/>"
+                            f"连接数：{n.get('value', '')}"
+                        )
+                    },
+                })
+
+        formatted_links = []
+
+        for link in links:
+            status = str(link.get("status", "keep"))
+            action = str(link.get("update_action", status))
+            color = STATUS_COLORS.get(status, STATUS_COLORS.get(action, "#607d8b"))
+
+            relation_code = normalize_relation_type(link.get("relation", ""))
+            relation_zh = str(link.get("relation_label", relation_label(relation_code)))
+
+            source_name = str(link.get("source_name", link.get("source", "")))
+            target_name = str(link.get("target_name", link.get("target", "")))
+
+            tooltip = (
+                f"主体：{source_name}<br/>"
+                f"主体ID：{link.get('source_org_id', link.get('source', ''))}<br/>"
+                f"客体：{target_name}<br/>"
+                f"客体ID：{link.get('target_org_id', link.get('target', ''))}<br/>"
+                f"关系：{relation_zh}<br/>"
+                f"关系码：{relation_code}<br/>"
+                f"置信度：{link.get('confidence', '')}<br/>"
+                f"原始置信度：{link.get('original_confidence', '')}<br/>"
+                f"来源：{link.get('sources', '')}<br/>"
+                f"状态：{status}<br/>"
+                f"动作：{link.get('update_action_label', action_label(action))}<br/>"
+                f"触发约束：{link.get('triggered_constraint_ids', '')}<br/>"
+                f"触发互斥关系：{link.get('triggered_mutex_relations', '')}<br/>"
+                f"原因：{link.get('update_reason', '')}"
+            )
+
+            formatted_links.append({
+                "source": link.get("source", ""),
+                "target": link.get("target", ""),
+                "name": relation_zh,
+                "value": link.get("confidence", 0),
+                "tooltip": {"formatter": tooltip},
+                "lineStyle": {
+                    "color": color,
+                    "width": 2.8 if link.get("is_mutex_triggered", False) else 1.2,
+                    "opacity": 0.85,
+                    "curveness": 0.15,
+                },
+                "label": {
+                    "show": show_edge_label,
+                    "formatter": relation_zh,
+                    "fontSize": 9,
+                },
+            })
+
+        options.append({
+            "title": {
+                "text": f"{month} 组织关系图谱",
+                "left": "center",
+            },
+            "series": [{
+                "type": "graph",
+                "layout": "force",
+                "roam": True,
+                "draggable": True,
+                "data": nodes,
+                "links": formatted_links,
+                "categories": [{"name": "organization"}],
+                "force": {
+                    "repulsion": 160,
+                    "edgeLength": 105,
+                },
+                "label": {
+                    "show": True,
+                    "fontSize": 10,
+                },
+                "edgeLabel": {
+                    "show": show_edge_label,
+                    "fontSize": 9,
+                },
+                "emphasis": {
+                    "focus": "adjacency",
+                    "lineStyle": {
+                        "width": 4,
+                    },
+                },
+            }]
+        })
+
+    option = {
+        "baseOption": {
+            "timeline": {
+                "axisType": "category",
+                "autoPlay": False,
+                "playInterval": 1500,
+                "data": months,
+                "bottom": 5,
+            },
+            "tooltip": {},
+            "legend": {
+                "data": ["organization"],
+                "top": 30,
+            },
+            "series": [{
+                "type": "graph",
+                "layout": "force",
+            }],
+        },
+        "options": options,
     }
 
-
-def add_org_names_to_edges(edges, org_name_map):
-    if edges.empty:
-        return edges
-
-    edges = edges.copy()
-
-    if "subject_org_id" in edges.columns:
-        edges["subject_display"] = edges["subject_org_id"].astype(str).map(org_name_map)
-        edges["subject_display"] = edges["subject_display"].fillna(edges["subject_org_id"].astype(str))
-
-    if "object_org_id" in edges.columns:
-        edges["object_display"] = edges["object_org_id"].astype(str).map(org_name_map)
-        edges["object_display"] = edges["object_display"].fillna(edges["object_org_id"].astype(str))
-
-    return edges
+    return option
 
 
-def relation_color(relation_type):
-    relation_type = str(relation_type)
+def page_overview() -> None:
+    st.title("组织关系图谱校验更新总览")
 
-    color_map = {
-        "verbal_cooperation": "#4CAF50",
-        "material_cooperation": "#2196F3",
-        "verbal_conflict": "#FF9800",
-        "material_conflict": "#F44336",
-        "mixed_relation": "#9C27B0"
-    }
+    edges = load_csv(EDGES_AFTER)
+    constraints = load_csv(FINAL_CONSTRAINTS)
+    conflicts = load_csv(CONFLICTS)
+    decisions = load_csv(DECISIONS)
 
-    return color_map.get(relation_type, "#9E9E9E")
+    c1, c2, c3, c4 = st.columns(4)
 
+    with c1:
+        metric_card("关系边数", len(edges))
 
-def status_color(status):
-    status = str(status)
+    with c2:
+        metric_card("互斥约束数", len(constraints))
 
-    if status == "active":
-        return "#4CAF50"
-    if status == "hidden":
-        return "#9E9E9E"
-    if status == "removed":
-        return "#F44336"
+    with c3:
+        metric_card("触发冲突数", len(conflicts))
 
-    return "#607D8B"
-
-
-def show_dataframe(df, height=400):
-    if df.empty:
-        st.info("暂无数据。")
-    else:
-        st.dataframe(df, use_container_width=True, height=height)
-
-
-def metric_value(df, key, fallback=0):
-    if df.empty:
-        return fallback
-
-    if "metric" not in df.columns or "value" not in df.columns:
-        return fallback
-
-    row = df[df["metric"] == key]
-
-    if row.empty:
-        return fallback
-
-    return row.iloc[0]["value"]
-
-
-# =========================
-# 总览页
-# =========================
-
-def page_dashboard(data):
-    st.title("组织机构复杂关系图谱总览")
-
-    orgs = data["organizations"]
-    edges_before = data["edges_before"]
-    edges_after = data["edges_after"]
-    conflicts = data["conflicts"]
-    constraints = data["constraints"]
-    summary = data["evaluation_summary"]
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    org_count = len(orgs)
-    before_count = len(edges_before)
-    after_count = len(edges_after)
-    conflict_count = len(conflicts)
-
-    if not summary.empty:
-        org_count = metric_value(summary, "organization_count", org_count)
-        before_count = metric_value(summary, "edges_before_check", before_count)
-        after_count = metric_value(summary, "edges_after_check", after_count)
-        conflict_count = metric_value(summary, "detected_conflicts", conflict_count)
-
-    col1.metric("组织节点数", org_count)
-    col2.metric("校验前关系数", before_count)
-    col3.metric("校验后关系数", after_count)
-    col4.metric("冲突/复核记录数", conflict_count)
+    with c4:
+        metric_card("更新决策数", len(decisions))
 
     st.divider()
 
-    col5, col6, col7, col8 = st.columns(4)
+    if not edges.empty and "update_action" in edges.columns:
+        st.subheader("边更新动作分布")
+        tmp = edges.copy()
+        tmp["update_action_label"] = tmp["update_action"].apply(action_label)
+        action_counts = tmp["update_action_label"].value_counts().reset_index()
+        action_counts.columns = ["update_action", "count"]
+        st.bar_chart(action_counts.set_index("update_action"))
 
-    active_edges = 0
-    hidden_edges = 0
-    mixed_edges = 0
-    cross_source_edges = 0
+    if not constraints.empty and "final_status" in constraints.columns:
+        st.subheader("最终约束状态分布")
+        status_counts = constraints["final_status"].value_counts().reset_index()
+        status_counts.columns = ["final_status", "count"]
+        st.bar_chart(status_counts.set_index("final_status"))
 
-    if not edges_after.empty:
-        if "status" in edges_after.columns:
-            active_edges = len(edges_after[edges_after["status"] == "active"])
-            hidden_edges = len(edges_after[edges_after["status"] == "hidden"])
+    if not conflicts.empty and "month" in conflicts.columns:
+        st.subheader("每月互斥冲突数量")
+        month_counts = conflicts["month"].value_counts().sort_index().reset_index()
+        month_counts.columns = ["month", "count"]
+        st.line_chart(month_counts.set_index("month"))
 
-        if "relation_type" in edges_after.columns:
-            mixed_edges = len(edges_after[edges_after["relation_type"] == "mixed_relation"])
-
-    if not edges_before.empty and "source_datasets" in edges_before.columns:
-        s = edges_before["source_datasets"].fillna("").astype(str)
-        cross_source_edges = len(edges_before[s.str.contains("ICEWS") & s.str.contains("GDELT")])
-
-    col5.metric("Active 关系", active_edges)
-    col6.metric("Hidden 关系", hidden_edges)
-    col7.metric("Mixed 关系", mixed_edges)
-    col8.metric("跨源共同支持关系", cross_source_edges)
-
-    st.divider()
-
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("关系状态分布")
-        if not edges_after.empty and "status" in edges_after.columns:
-            status_df = edges_after["status"].fillna("unknown").value_counts().reset_index()
-            status_df.columns = ["status", "count"]
-            st.bar_chart(status_df.set_index("status"))
-            show_dataframe(status_df, height=200)
-        else:
-            st.info("缺少 status 字段。")
-
-    with right:
-        st.subheader("关系类型分布")
-        if not edges_after.empty and "relation_type" in edges_after.columns:
-            relation_df = edges_after["relation_type"].fillna("unknown").value_counts().reset_index()
-            relation_df.columns = ["relation_type", "count"]
-            st.bar_chart(relation_df.set_index("relation_type"))
-            show_dataframe(relation_df, height=200)
-        else:
-            st.info("缺少 relation_type 字段。")
-
-    st.divider()
-
-    st.subheader("最终约束概览")
-    show_dataframe(constraints, height=300)
+    st.subheader("文件状态")
+    st.write({
+        "timeline_graph_data.json": os.path.exists(TIMELINE_JSON),
+        "relation_edges_after_check.csv": os.path.exists(EDGES_AFTER),
+        "mutual_exclusion_constraints_final.csv": os.path.exists(FINAL_CONSTRAINTS),
+        "mutual_exclusion_conflicts.csv": os.path.exists(CONFLICTS),
+        "update_decisions.csv": os.path.exists(DECISIONS),
+    })
 
 
-# =========================
-# 时间线图谱页
-# =========================
+def page_timeline_graph() -> None:
+    st.title("时间轴组织关系图谱")
 
-def build_pyvis_graph(edges, org_name_map, max_edges=300):
-    net = Network(
-        height="720px",
-        width="100%",
-        directed=True,
-        notebook=False
+    edges = load_csv(EDGES_AFTER)
+    org_name_map, relation_label_map = build_display_maps(edges)
+
+    timeline_data_raw = load_timeline_json(TIMELINE_JSON)
+    timeline_data = enrich_timeline_data(
+        timeline_data=timeline_data_raw,
+        org_name_map=org_name_map,
+        relation_label_map=relation_label_map,
     )
 
-    net.barnes_hut(
-        gravity=-30000,
-        central_gravity=0.3,
-        spring_length=180,
-        spring_strength=0.02,
-        damping=0.09
-    )
+    months = timeline_data.get("months", [])
 
-    if edges.empty:
-        return net
-
-    edges = edges.head(max_edges).copy()
-
-    node_weight = {}
-
-    for _, row in edges.iterrows():
-        s = str(row.get("subject_org_id", ""))
-        o = str(row.get("object_org_id", ""))
-
-        node_weight[s] = node_weight.get(s, 0) + 1
-        node_weight[o] = node_weight.get(o, 0) + 1
-
-    for node_id, weight in node_weight.items():
-        label = org_name_map.get(node_id, node_id)
-        size = min(10 + weight * 2, 45)
-
-        net.add_node(
-            node_id,
-            label=label[:30],
-            title=f"{label}<br>{node_id}<br>度数: {weight}",
-            size=size
-        )
-
-    for _, row in edges.iterrows():
-        s = str(row.get("subject_org_id", ""))
-        o = str(row.get("object_org_id", ""))
-
-        relation_type = str(row.get("relation_type", ""))
-        confidence = safe_float(row.get("confidence", 0.0))
-        event_count = safe_int(row.get("event_count", 0))
-        status = str(row.get("status", ""))
-
-        title = (
-            f"关系类型: {relation_type}<br>"
-            f"置信度: {confidence}<br>"
-            f"事件数: {event_count}<br>"
-            f"状态: {status}<br>"
-            f"来源: {row.get('source_datasets', '')}"
-        )
-
-        width = max(1, min(8, math.log1p(event_count) + 1))
-
-        net.add_edge(
-            s,
-            o,
-            label=relation_type,
-            title=title,
-            color=relation_color(relation_type),
-            width=width
-        )
-
-    return net
-
-
-def render_pyvis(net):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-        path = tmp_file.name
-
-    net.save_graph(path)
-
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-
-    st.components.v1.html(html, height=760, scrolling=True)
-
-    try:
-        os.remove(path)
-    except Exception:
-        pass
-
-
-def page_graph_timeline(data):
-    st.title("时间线图谱")
-
-    org_name_map = get_org_name_map(data["organizations"])
-    edges = data["edges_after"]
-
-    if edges.empty:
-        st.info("未找到 relation_edges_after_check.csv，请先运行 11_update_graph.py。")
+    if not months:
+        st.warning("未找到 timeline_graph_data.json 或其中没有月份数据。请先运行第 11 步。")
         return
 
-    edges = add_org_names_to_edges(edges, org_name_map)
+    all_links = []
+    for m in months:
+        all_links.extend(timeline_data.get("graphs", {}).get(m, {}).get("links", []))
+
+    all_relation_types = sorted(set(
+        normalize_relation_type(x.get("relation", ""))
+        for x in all_links
+        if x.get("relation", "")
+    ))
+
+    relation_display = {
+        r: f"{r} - {relation_label(r)}"
+        for r in all_relation_types
+    }
+
+    all_actions = sorted(set(str(x.get("update_action", x.get("status", "keep"))) for x in all_links))
 
     st.sidebar.subheader("图谱筛选")
 
-    months = sorted(edges["event_month"].dropna().astype(str).unique().tolist()) if "event_month" in edges.columns else []
-    relation_types = sorted(edges["relation_type"].dropna().astype(str).unique().tolist()) if "relation_type" in edges.columns else []
-    statuses = sorted(edges["status"].dropna().astype(str).unique().tolist()) if "status" in edges.columns else []
-
-    selected_month = st.sidebar.selectbox("选择月份", months) if months else None
-    selected_relations = st.sidebar.multiselect("关系类型", relation_types, default=relation_types)
-    selected_statuses = st.sidebar.multiselect("状态", statuses, default=["active"] if "active" in statuses else statuses)
-
-    min_confidence = st.sidebar.slider("最低置信度", 0.0, 1.0, 0.0, 0.05)
-    max_edges = st.sidebar.slider("图中最多显示边数", 50, 1000, 300, 50)
-
-    filtered = edges.copy()
-
-    if selected_month:
-        filtered = filtered[filtered["event_month"].astype(str) == selected_month]
-
-    if selected_relations:
-        filtered = filtered[filtered["relation_type"].astype(str).isin(selected_relations)]
-
-    if selected_statuses and "status" in filtered.columns:
-        filtered = filtered[filtered["status"].astype(str).isin(selected_statuses)]
-
-    if "confidence" in filtered.columns:
-        filtered["confidence_num"] = filtered["confidence"].apply(safe_float)
-        filtered = filtered[filtered["confidence_num"] >= min_confidence]
-
-    if "event_count" in filtered.columns:
-        filtered["event_count_num"] = filtered["event_count"].apply(safe_int)
-        filtered = filtered.sort_values(
-            by=["event_count_num", "confidence_num" if "confidence_num" in filtered.columns else "event_count_num"],
-            ascending=False
-        )
-
-    st.write(f"当前筛选后关系边数量：{len(filtered)}")
-    st.caption("图谱为了保证浏览速度，只显示筛选后排名靠前的一部分边。")
-
-    net = build_pyvis_graph(filtered, org_name_map, max_edges=max_edges)
-    render_pyvis(net)
-
-    st.subheader("当前图谱边数据")
-    display_cols = [
-        c for c in [
-            "edge_id",
-            "subject_display",
-            "relation_type",
-            "object_display",
-            "event_month",
-            "event_count",
-            "confidence",
-            "status",
-            "source_datasets",
-            "check_action",
-            "check_reason"
-        ]
-        if c in filtered.columns
-    ]
-
-    show_dataframe(filtered[display_cols].head(1000), height=400)
-
-
-# =========================
-# 节点详情页
-# =========================
-
-def page_node_detail(data):
-    st.title("节点详情")
-
-    orgs = data["organizations"]
-    aliases = data["aliases"]
-    edges_after = data["edges_after"]
-
-    if orgs.empty:
-        st.info("未找到 organizations.csv。")
-        return
-
-    org_name_map = get_org_name_map(orgs)
-
-    search_text = st.text_input("输入组织名称或 org_id 搜索", "")
-
-    candidates = orgs.copy()
-
-    if search_text:
-        text = search_text.lower()
-
-        mask = pd.Series(False, index=candidates.index)
-
-        for col in ["org_id", "canonical_name", "raw_name", "normalized_name", "clean_name"]:
-            if col in candidates.columns:
-                mask = mask | candidates[col].fillna("").astype(str).str.lower().str.contains(text, regex=False)
-
-        candidates = candidates[mask]
-
-    st.write(f"匹配组织数量：{len(candidates)}")
-
-    if candidates.empty:
-        return
-
-    display_col = "canonical_name" if "canonical_name" in candidates.columns else "org_id"
-
-    selected_label = st.selectbox(
-        "选择组织",
-        candidates.apply(
-            lambda r: f"{r.get('org_id', '')} | {r.get(display_col, '')}",
-            axis=1
-        ).tolist()
+    selected_months = st.sidebar.multiselect(
+        "月份",
+        options=months,
+        default=months,
     )
 
-    selected_org_id = selected_label.split("|")[0].strip()
-
-    selected_org = orgs[orgs["org_id"].astype(str) == selected_org_id]
-
-    st.subheader("组织基本信息")
-    show_dataframe(selected_org, height=180)
-
-    st.subheader("组织别名")
-    if not aliases.empty and "org_id" in aliases.columns:
-        alias_df = aliases[aliases["org_id"].astype(str) == selected_org_id]
-        show_dataframe(alias_df, height=220)
-    else:
-        st.info("未找到别名表。")
-
-    st.subheader("相关关系边")
-
-    if not edges_after.empty:
-        related = edges_after[
-            (edges_after["subject_org_id"].astype(str) == selected_org_id) |
-            (edges_after["object_org_id"].astype(str) == selected_org_id)
-        ].copy()
-
-        related = add_org_names_to_edges(related, org_name_map)
-
-        st.write(f"相关关系数量：{len(related)}")
-
-        col1, col2, col3 = st.columns(3)
-
-        if not related.empty:
-            col1.metric("作为主体的关系数", len(related[related["subject_org_id"].astype(str) == selected_org_id]))
-            col2.metric("作为客体的关系数", len(related[related["object_org_id"].astype(str) == selected_org_id]))
-            if "status" in related.columns:
-                col3.metric("隐藏关系数", len(related[related["status"] == "hidden"]))
-
-        display_cols = [
-            c for c in [
-                "edge_id",
-                "subject_display",
-                "relation_type",
-                "object_display",
-                "event_month",
-                "event_count",
-                "confidence",
-                "status",
-                "source_datasets",
-                "check_action",
-                "check_reason"
-            ]
-            if c in related.columns
-        ]
-
-        show_dataframe(related[display_cols].head(1000), height=450)
-    else:
-        st.info("未找到关系边文件。")
-
-
-# =========================
-# 关系详情页
-# =========================
-
-def page_edge_detail(data):
-    st.title("关系详情")
-
-    org_name_map = get_org_name_map(data["organizations"])
-    edges = data["edges_after"]
-    conflicts = data["conflicts"]
-
-    if edges.empty:
-        st.info("未找到 relation_edges_after_check.csv。")
-        return
-
-    edges = add_org_names_to_edges(edges, org_name_map)
-
-    st.sidebar.subheader("关系筛选")
-
-    relation_types = sorted(edges["relation_type"].dropna().astype(str).unique().tolist()) if "relation_type" in edges.columns else []
-    statuses = sorted(edges["status"].dropna().astype(str).unique().tolist()) if "status" in edges.columns else []
-
-    selected_relation = st.sidebar.selectbox("关系类型", ["全部"] + relation_types)
-    selected_status = st.sidebar.selectbox("状态", ["全部"] + statuses)
-    keyword = st.sidebar.text_input("组织名称 / edge_id 关键词", "")
-
-    filtered = edges.copy()
-
-    if selected_relation != "全部":
-        filtered = filtered[filtered["relation_type"].astype(str) == selected_relation]
-
-    if selected_status != "全部":
-        filtered = filtered[filtered["status"].astype(str) == selected_status]
-
-    if keyword:
-        k = keyword.lower()
-        mask = pd.Series(False, index=filtered.index)
-
-        for col in ["edge_id", "subject_org_id", "object_org_id", "subject_display", "object_display"]:
-            if col in filtered.columns:
-                mask = mask | filtered[col].fillna("").astype(str).str.lower().str.contains(k, regex=False)
-
-        filtered = filtered[mask]
-
-    st.write(f"匹配关系数量：{len(filtered)}")
-
-    if filtered.empty:
-        return
-
-    if "confidence" in filtered.columns:
-        filtered["confidence_num"] = filtered["confidence"].apply(safe_float)
-        filtered = filtered.sort_values(by="confidence_num", ascending=False)
-
-    selected_edge_label = st.selectbox(
-        "选择关系边",
-        filtered.apply(
-            lambda r: (
-                f"{r.get('edge_id', '')} | "
-                f"{r.get('subject_display', r.get('subject_org_id', ''))} "
-                f"-[{r.get('relation_type', '')}]-> "
-                f"{r.get('object_display', r.get('object_org_id', ''))} | "
-                f"{r.get('event_month', '')}"
-            ),
-            axis=1
-        ).head(5000).tolist()
+    selected_relation_display = st.sidebar.multiselect(
+        "关系类型",
+        options=[relation_display[r] for r in all_relation_types],
+        default=[],
     )
 
-    selected_edge_id = selected_edge_label.split("|")[0].strip()
-    selected_edge = edges[edges["edge_id"].astype(str) == selected_edge_id]
+    relation_types = []
+    for item in selected_relation_display:
+        relation_types.append(item.split(" - ")[0].strip())
 
-    st.subheader("关系边详情")
-    show_dataframe(selected_edge, height=220)
+    actions = st.sidebar.multiselect(
+        "更新动作",
+        options=all_actions,
+        default=[],
+        format_func=lambda x: f"{x} - {action_label(x)}",
+    )
 
-    if not selected_edge.empty:
-        row = selected_edge.iloc[0]
+    min_confidence = st.sidebar.slider(
+        "最低关系置信度",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.05,
+    )
 
-        col1, col2, col3, col4 = st.columns(4)
+    only_triggered = st.sidebar.checkbox("只看触发互斥约束的边", value=False)
+    only_cross_source = st.sidebar.checkbox("只看 ICEWS+GDELT 共同支持关系", value=False)
+    show_edge_label = st.sidebar.checkbox("显示边关系中文标签", value=EDGE_BOOL)
 
-        col1.metric("关系类型", row.get("relation_type", ""))
-        col2.metric("置信度", row.get("confidence", ""))
-        col3.metric("事件数", row.get("event_count", ""))
-        col4.metric("状态", row.get("status", ""))
+    keyword = st.sidebar.text_input(
+        "搜索组织名称 / ORG_ID / 关系",
+        value="",
+    )
 
-        st.subheader("校验说明")
-        st.write("触发约束：", row.get("triggered_constraints", ""))
-        st.write("处理动作：", row.get("check_action", ""))
-        st.write("处理原因：", row.get("check_reason", ""))
+    st.caption(
+        "节点显示真实名称；边显示中文关系含义。"
+        "颜色含义：keep=绿色，downgraded=橙色，hidden=灰色，mark_mixed=紫色，review=红色。"
+    )
 
-    st.subheader("相关冲突记录")
+    option = build_echarts_option(
+        timeline_data=timeline_data,
+        selected_months=selected_months,
+        relation_types=relation_types,
+        actions=actions,
+        min_confidence=min_confidence,
+        only_triggered=only_triggered,
+        only_cross_source=only_cross_source,
+        keyword=keyword,
+        show_edge_label=show_edge_label,
+    )
 
-    if not conflicts.empty and "edge_id" in conflicts.columns:
-        related_conflicts = conflicts[conflicts["edge_id"].astype(str) == selected_edge_id]
-        show_dataframe(related_conflicts, height=320)
+    if HAS_ECHARTS:
+        st_echarts(options=option, height="760px")
     else:
-        st.info("未找到对应冲突记录。")
+        st.warning("未安装 streamlit-echarts，无法展示 ECharts 图。请运行：pip install streamlit-echarts")
+        st.json(option)
+
+    st.subheader("当前筛选说明")
+    st.write({
+        "selected_months": selected_months,
+        "relation_types": relation_types,
+        "actions": actions,
+        "min_confidence": min_confidence,
+        "only_triggered": only_triggered,
+        "only_cross_source": only_cross_source,
+        "show_edge_label": show_edge_label,
+        "keyword": keyword,
+    })
 
 
-# =========================
-# 冲突列表页
-# =========================
+def page_constraints() -> None:
+    st.title("互斥约束列表")
 
-def page_conflict_list(data):
-    st.title("冲突列表")
-
-    conflicts = data["conflicts"]
-
-    if conflicts.empty:
-        st.info("未找到 detected_conflicts.csv。")
-        return
-
-    st.sidebar.subheader("冲突筛选")
-
-    actions = sorted(conflicts["action"].dropna().astype(str).unique().tolist()) if "action" in conflicts.columns else []
-    conflict_types = sorted(conflicts["conflict_type"].dropna().astype(str).unique().tolist()) if "conflict_type" in conflicts.columns else []
-    constraints = sorted(conflicts["triggered_constraint"].dropna().astype(str).unique().tolist()) if "triggered_constraint" in conflicts.columns else []
-
-    selected_action = st.sidebar.selectbox("处理动作", ["全部"] + actions)
-    selected_conflict_type = st.sidebar.selectbox("冲突类型", ["全部"] + conflict_types)
-    selected_constraint = st.sidebar.selectbox("触发约束", ["全部"] + constraints)
-    keyword = st.sidebar.text_input("关键词", "")
-
-    filtered = conflicts.copy()
-
-    if selected_action != "全部":
-        filtered = filtered[filtered["action"].astype(str) == selected_action]
-
-    if selected_conflict_type != "全部":
-        filtered = filtered[filtered["conflict_type"].astype(str) == selected_conflict_type]
-
-    if selected_constraint != "全部":
-        filtered = filtered[filtered["triggered_constraint"].astype(str) == selected_constraint]
-
-    if keyword:
-        k = keyword.lower()
-        mask = pd.Series(False, index=filtered.index)
-
-        for col in filtered.columns:
-            mask = mask | filtered[col].fillna("").astype(str).str.lower().str.contains(k, regex=False)
-
-        filtered = filtered[mask]
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("冲突记录数", len(filtered))
-
-    if "action" in filtered.columns:
-        col2.metric("Hide", len(filtered[filtered["action"] == "hide"]))
-        col3.metric("Downgrade", len(filtered[filtered["action"] == "downgrade"]))
-        col4.metric("Mark Mixed", len(filtered[filtered["action"].astype(str).str.contains("mixed", case=False, regex=False)]))
-
-    st.subheader("冲突记录表")
-    show_dataframe(filtered, height=620)
-
-
-# =========================
-# 约束列表页
-# =========================
-
-def page_constraints(data):
-    st.title("最终约束规则")
-
-    constraints = data["constraints"]
+    constraints = load_csv(FINAL_CONSTRAINTS)
 
     if constraints.empty:
-        st.info("未找到 temporal_constraints_final.csv。")
+        st.warning("未找到 mutual_exclusion_constraints_final.csv。")
         return
 
-    col1, col2, col3 = st.columns(3)
+    df = constraints.copy()
 
-    col1.metric("最终约束数量", len(constraints))
+    if "relation_a" in df.columns:
+        df["relation_a_label"] = df["relation_a"].apply(lambda x: f"{normalize_relation_type(x)} - {relation_label(x)}")
 
-    if "source" in constraints.columns:
-        col2.metric("约束来源类型数", constraints["source"].nunique())
+    if "relation_b" in df.columns:
+        df["relation_b_label"] = df["relation_b"].apply(lambda x: f"{normalize_relation_type(x)} - {relation_label(x)}")
 
-    if "enabled" in constraints.columns:
-        enabled_count = len(
-            constraints[
-                constraints["enabled"].astype(str).str.lower().isin(["true", "1", "yes"])
-            ]
-        )
-        col3.metric("启用约束数", enabled_count)
+    statuses = get_unique_values(df, "final_status")
+    selected_statuses = st.multiselect("final_status", options=statuses, default=statuses)
 
-    st.divider()
+    if selected_statuses and "final_status" in df.columns:
+        df = df[df["final_status"].astype(str).isin(selected_statuses)]
 
-    left, right = st.columns(2)
+    if "patecon_confidence" in df.columns:
+        min_conf = st.slider("最低 PaTeCon-style confidence", 0.0, 1.0, 0.0, 0.05)
+        df = df[df["patecon_confidence"].apply(lambda x: safe_float(x, 0.0)) >= min_conf]
 
-    with left:
-        st.subheader("来源分布")
-        if "source" in constraints.columns:
-            source_df = constraints["source"].fillna("unknown").value_counts().reset_index()
-            source_df.columns = ["source", "count"]
-            st.bar_chart(source_df.set_index("source"))
-            show_dataframe(source_df, height=180)
+    show_cols = [
+        "constraint_id",
+        "constraint_key",
+        "constraint_name",
+        "relation_a_label",
+        "relation_b_label",
+        "candidate_level",
+        "auto_filter_status",
+        "final_status",
+        "patecon_confidence",
+        "source_weighted_confidence",
+        "violation_rate",
+        "llm_expected_action",
+        "manual_score",
+        "manual_comment",
+    ]
 
-    with right:
-        st.subheader("软硬约束分布")
-        if "hard_or_soft" in constraints.columns:
-            hs_df = constraints["hard_or_soft"].fillna("unknown").value_counts().reset_index()
-            hs_df.columns = ["hard_or_soft", "count"]
-            st.bar_chart(hs_df.set_index("hard_or_soft"))
-            show_dataframe(hs_df, height=180)
+    show_cols = [c for c in show_cols if c in df.columns]
 
-    st.subheader("约束详情")
-    show_dataframe(constraints, height=500)
+    st.dataframe(df[show_cols], use_container_width=True, height=620)
 
 
-# =========================
-# 主程序
-# =========================
+def page_conflicts() -> None:
+    st.title("互斥冲突列表")
 
-def main():
-    data = load_all_data()
+    conflicts = load_csv(CONFLICTS)
 
-    st.sidebar.title("组织关系图谱系统")
+    if conflicts.empty:
+        st.warning("未找到 mutual_exclusion_conflicts.csv。")
+        return
+
+    df = conflicts.copy()
+
+    if "relation_a" in df.columns:
+        df["relation_a_label"] = df["relation_a"].apply(lambda x: f"{normalize_relation_type(x)} - {relation_label(x)}")
+
+    if "relation_b" in df.columns:
+        df["relation_b_label"] = df["relation_b"].apply(lambda x: f"{normalize_relation_type(x)} - {relation_label(x)}")
+
+    months = get_unique_values(df, "month")
+    actions = get_unique_values(df, "conflict_action")
+    constraints = get_unique_values(df, "constraint_id")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        selected_months = st.multiselect("月份", months, default=months)
+
+    with c2:
+        selected_actions = st.multiselect("处理动作", actions, default=actions)
+
+    with c3:
+        selected_constraints = st.multiselect("约束 ID", constraints, default=[])
+
+    if selected_months and "month" in df.columns:
+        df = df[df["month"].astype(str).isin(selected_months)]
+
+    if selected_actions and "conflict_action" in df.columns:
+        df = df[df["conflict_action"].astype(str).isin(selected_actions)]
+
+    if selected_constraints and "constraint_id" in df.columns:
+        df = df[df["constraint_id"].astype(str).isin(selected_constraints)]
+
+    st.write(f"当前冲突数量：{len(df)}")
+
+    show_cols = [
+        "conflict_id",
+        "month",
+        "subject_name",
+        "object_name",
+        "subject_org_id",
+        "object_org_id",
+        "relation_a_label",
+        "relation_b_label",
+        "constraint_id",
+        "constraint_key",
+        "final_status",
+        "conflict_action",
+        "patecon_confidence",
+        "violation_rate",
+        "reason",
+        "edge_ids_a",
+        "edge_ids_b",
+    ]
+
+    show_cols = [c for c in show_cols if c in df.columns]
+    st.dataframe(df[show_cols], use_container_width=True, height=650)
+
+
+def page_cases() -> None:
+    st.title("典型案例")
+
+    case_files = []
+
+    if os.path.exists(CASE_DIR):
+        for name in sorted(os.listdir(CASE_DIR)):
+            if name.endswith(".csv"):
+                case_files.append(name)
+
+    if not case_files:
+        st.warning("未找到案例文件。请先运行第 11 步生成 outputs/case_studies/。")
+        return
+
+    selected = st.selectbox("选择案例文件", case_files)
+
+    path = os.path.join(CASE_DIR, selected)
+    df = load_csv(path)
+
+    st.write(f"文件：`{path}`")
+    st.write(f"案例数量：{len(df)}")
+    st.dataframe(df, use_container_width=True, height=680)
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="组织关系图谱校验更新系统",
+        layout="wide",
+    )
+
+    st.sidebar.title("组织关系图谱校验更新")
 
     page = st.sidebar.radio(
-        "选择页面",
+        "页面",
         [
-            "dashboard",
-            "graph_timeline",
-            "node_detail",
-            "edge_detail",
-            "conflict_list",
-            "constraints"
-        ]
+            "总览页",
+            "时间轴图谱页",
+            "互斥约束页",
+            "冲突列表页",
+            "案例页",
+        ],
     )
 
     st.sidebar.divider()
-    st.sidebar.caption("数据目录")
-    st.sidebar.code(DATA_DIR)
+    st.sidebar.caption(f"项目路径：{PROJECT_ROOT}")
 
-    if page == "dashboard":
-        page_dashboard(data)
-    elif page == "graph_timeline":
-        page_graph_timeline(data)
-    elif page == "node_detail":
-        page_node_detail(data)
-    elif page == "edge_detail":
-        page_edge_detail(data)
-    elif page == "conflict_list":
-        page_conflict_list(data)
-    elif page == "constraints":
-        page_constraints(data)
+    if page == "总览页":
+        page_overview()
+    elif page == "时间轴图谱页":
+        page_timeline_graph()
+    elif page == "互斥约束页":
+        page_constraints()
+    elif page == "冲突列表页":
+        page_conflicts()
+    elif page == "案例页":
+        page_cases()
 
 
 if __name__ == "__main__":
