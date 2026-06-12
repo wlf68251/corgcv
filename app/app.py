@@ -498,6 +498,324 @@ def build_echarts_option(
     return option
 
 
+def filter_node_links(
+    links: List[Dict[str, Any]],
+    keyword: str,
+    relation_types: List[str],
+    actions: List[str],
+    min_confidence: float,
+    only_triggered: bool,
+    only_cross_source: bool,
+) -> List[Dict[str, Any]]:
+    """
+    仅筛选与某个节点相关的一阶关系边。
+
+    与普通时间轴图谱的 keyword 不同，这里的 keyword 只用于匹配节点，
+    即 source / target 的 ORG_ID 或真实组织名称，不匹配关系名称。
+    """
+    result: List[Dict[str, Any]] = []
+    kw = str(keyword or "").strip().lower()
+
+    if not kw:
+        return result
+
+    for link in links:
+        source_id = str(link.get("source_org_id", link.get("source", "")))
+        target_id = str(link.get("target_org_id", link.get("target", "")))
+        source_name = str(link.get("source_name", source_id))
+        target_name = str(link.get("target_name", target_id))
+
+        node_searchable = " ".join([
+            source_id,
+            target_id,
+            source_name,
+            target_name,
+        ]).lower()
+
+        if kw not in node_searchable:
+            continue
+
+        relation = normalize_relation_type(link.get("relation", ""))
+        action = str(link.get("update_action", link.get("status", "keep")))
+        action_zh = str(link.get("update_action_label", action_label(action)))
+        conf = safe_float(link.get("confidence", 0.0), 0.0)
+        triggered = bool(link.get("is_mutex_triggered", False))
+        sources = str(link.get("sources", "")).upper()
+
+        if relation_types and relation not in relation_types:
+            continue
+
+        if actions and action not in actions and action_zh not in actions:
+            continue
+
+        if conf < min_confidence:
+            continue
+
+        if only_triggered and not triggered:
+            continue
+
+        if only_cross_source and not ("ICEWS" in sources and "GDELT" in sources):
+            continue
+
+        result.append(link)
+
+    return result
+
+
+def build_node_evolution_echarts_option(
+    timeline_data: Dict[str, Any],
+    selected_months: List[str],
+    node_keyword: str,
+    relation_types: List[str],
+    actions: List[str],
+    min_confidence: float,
+    only_triggered: bool,
+    only_cross_source: bool,
+    show_edge_label: bool,
+    max_edges_per_month: int,
+) -> Dict[str, Any]:
+    """
+    构建“单节点关系演化”时间轴图谱。
+
+    展示逻辑：
+        1. 输入一个节点名称或 ORG_ID，例如 CHINA；
+        2. 每个月只展示该节点的一阶关系边；
+        3. 连接字段 source / target 仍使用 ORG_ID，避免图谱断连；
+        4. 节点 label 使用真实组织名称；
+        5. 目标节点会被放大显示。
+    """
+    all_months = timeline_data.get("months", [])
+    graphs = timeline_data.get("graphs", {})
+
+    months = selected_months if selected_months else all_months
+    kw = str(node_keyword or "").strip().lower()
+    options: List[Dict[str, Any]] = []
+
+    for month in months:
+        graph = graphs.get(month, {"nodes": [], "links": []})
+
+        links = filter_node_links(
+            graph.get("links", []),
+            keyword=node_keyword,
+            relation_types=relation_types,
+            actions=actions,
+            min_confidence=min_confidence,
+            only_triggered=only_triggered,
+            only_cross_source=only_cross_source,
+        )
+
+        links = sorted(
+            links,
+            key=lambda x: safe_float(x.get("confidence", 0.0), 0.0),
+            reverse=True,
+        )[:max_edges_per_month]
+
+        node_ids = set()
+        for link in links:
+            node_ids.add(str(link.get("source", "")))
+            node_ids.add(str(link.get("target", "")))
+
+        nodes = []
+        center_node_count = 0
+
+        for n in graph.get("nodes", []):
+            node_id = str(n.get("id", ""))
+            if node_id not in node_ids:
+                continue
+
+            display_name = str(n.get("name", node_id))
+            org_id = str(n.get("org_id", node_id))
+            is_center = bool(kw and (kw in display_name.lower() or kw in org_id.lower() or kw in node_id.lower()))
+            if is_center:
+                center_node_count += 1
+
+            nodes.append({
+                **n,
+                "symbolSize": 42 if is_center else 24,
+                "category": "中心节点" if is_center else "关联节点",
+                "label": {
+                    "show": True,
+                    "formatter": display_name,
+                    "fontSize": 12 if is_center else 10,
+                    "fontWeight": "bold" if is_center else "normal",
+                },
+                "tooltip": {
+                    "formatter": (
+                        f"组织名称：{display_name}<br/>"
+                        f"组织ID：{org_id}<br/>"
+                        f"节点类型：{'中心节点' if is_center else '关联节点'}<br/>"
+                        f"连接数：{n.get('value', '')}"
+                    )
+                },
+            })
+
+        formatted_links = []
+        for link in links:
+            status = str(link.get("status", "keep"))
+            action = str(link.get("update_action", status))
+            color = STATUS_COLORS.get(status, STATUS_COLORS.get(action, "#607d8b"))
+
+            relation_code = normalize_relation_type(link.get("relation", ""))
+            relation_zh = str(link.get("relation_label", relation_label(relation_code)))
+            source_name = str(link.get("source_name", link.get("source", "")))
+            target_name = str(link.get("target_name", link.get("target", "")))
+            is_triggered = bool(link.get("is_mutex_triggered", False))
+
+            tooltip = (
+                f"月份：{month}<br/>"
+                f"主体：{source_name}<br/>"
+                f"主体ID：{link.get('source_org_id', link.get('source', ''))}<br/>"
+                f"客体：{target_name}<br/>"
+                f"客体ID：{link.get('target_org_id', link.get('target', ''))}<br/>"
+                f"关系：{relation_zh}<br/>"
+                f"关系码：{relation_code}<br/>"
+                f"置信度：{link.get('confidence', '')}<br/>"
+                f"原始置信度：{link.get('original_confidence', '')}<br/>"
+                f"来源：{link.get('sources', '')}<br/>"
+                f"状态：{status}<br/>"
+                f"动作：{link.get('update_action_label', action_label(action))}<br/>"
+                f"触发约束：{link.get('triggered_constraint_ids', '')}<br/>"
+                f"触发互斥关系：{link.get('triggered_mutex_relations', '')}<br/>"
+                f"原因：{link.get('update_reason', '')}"
+            )
+
+            formatted_links.append({
+                "source": link.get("source", ""),
+                "target": link.get("target", ""),
+                "name": relation_zh,
+                "value": link.get("confidence", 0),
+                "tooltip": {"formatter": tooltip},
+                "lineStyle": {
+                    "color": color,
+                    "width": 3.0 if is_triggered else 1.3,
+                    "opacity": 0.85,
+                    "curveness": 0.18,
+                },
+                "label": {
+                    "show": show_edge_label,
+                    "formatter": relation_zh,
+                    "fontSize": 9,
+                },
+            })
+
+        options.append({
+            "title": {
+                "text": f"{month} {node_keyword} 关系演化图谱（边数：{len(formatted_links)}）",
+                "left": "center",
+            },
+            "legend": {
+                "data": ["中心节点", "关联节点"],
+                "top": 30,
+            },
+            "series": [{
+                "type": "graph",
+                "layout": "force",
+                "roam": True,
+                "draggable": True,
+                "data": nodes,
+                "links": formatted_links,
+                "categories": [
+                    {"name": "中心节点"},
+                    {"name": "关联节点"},
+                ],
+                "force": {
+                    "repulsion": 210,
+                    "edgeLength": 120,
+                },
+                "label": {
+                    "show": True,
+                    "fontSize": 10,
+                },
+                "edgeLabel": {
+                    "show": show_edge_label,
+                    "fontSize": 9,
+                },
+                "emphasis": {
+                    "focus": "adjacency",
+                    "lineStyle": {
+                        "width": 4,
+                    },
+                },
+            }]
+        })
+
+    option = {
+        "baseOption": {
+            "timeline": {
+                "axisType": "category",
+                "autoPlay": False,
+                "playInterval": 1500,
+                "data": months,
+                "bottom": 5,
+            },
+            "tooltip": {},
+            "legend": {
+                "top": 30,
+            },
+            "series": [{
+                "type": "graph",
+                "layout": "force",
+            }],
+        },
+        "options": options,
+    }
+
+    return option
+
+
+def collect_node_evolution_rows(
+    timeline_data: Dict[str, Any],
+    selected_months: List[str],
+    node_keyword: str,
+    relation_types: List[str],
+    actions: List[str],
+    min_confidence: float,
+    only_triggered: bool,
+    only_cross_source: bool,
+) -> pd.DataFrame:
+    """将单节点演化图谱中的 link 展开为表格，便于统计和明细展示。"""
+    rows: List[Dict[str, Any]] = []
+    months = selected_months if selected_months else timeline_data.get("months", [])
+    graphs = timeline_data.get("graphs", {})
+
+    for month in months:
+        graph = graphs.get(month, {"links": []})
+        links = filter_node_links(
+            graph.get("links", []),
+            keyword=node_keyword,
+            relation_types=relation_types,
+            actions=actions,
+            min_confidence=min_confidence,
+            only_triggered=only_triggered,
+            only_cross_source=only_cross_source,
+        )
+
+        for link in links:
+            relation_code = normalize_relation_type(link.get("relation", ""))
+            action = str(link.get("update_action", link.get("status", "keep")))
+            rows.append({
+                "month": month,
+                "source_name": link.get("source_name", link.get("source", "")),
+                "source_org_id": link.get("source_org_id", link.get("source", "")),
+                "relation_code": relation_code,
+                "relation_label": link.get("relation_label", relation_label(relation_code)),
+                "target_name": link.get("target_name", link.get("target", "")),
+                "target_org_id": link.get("target_org_id", link.get("target", "")),
+                "confidence": safe_float(link.get("confidence", 0.0), 0.0),
+                "original_confidence": link.get("original_confidence", ""),
+                "sources": link.get("sources", ""),
+                "status": link.get("status", ""),
+                "update_action": action,
+                "update_action_label": link.get("update_action_label", action_label(action)),
+                "is_mutex_triggered": link.get("is_mutex_triggered", False),
+                "triggered_constraint_ids": link.get("triggered_constraint_ids", ""),
+                "triggered_mutex_relations": link.get("triggered_mutex_relations", ""),
+                "update_reason": link.get("update_reason", ""),
+            })
+
+    return pd.DataFrame(rows)
+
+
 def page_overview() -> None:
     st.title("组织关系图谱校验更新总览")
 
@@ -666,6 +984,209 @@ def page_timeline_graph() -> None:
     })
 
 
+def page_node_evolution() -> None:
+    st.title("单节点关系演化图谱")
+
+    st.markdown(
+        """
+        本页面用于集中展示某一个组织节点在不同时期的关系发展情况。
+        例如输入 `CHINA`，可以观察该节点在 2023-01 至 2023-04 各月份中的一阶关系网络、关系类型变化、置信度与更新状态。
+        """
+    )
+
+    edges = load_csv(EDGES_AFTER)
+    org_name_map, relation_label_map = build_display_maps(edges)
+
+    timeline_data_raw = load_timeline_json(TIMELINE_JSON)
+    timeline_data = enrich_timeline_data(
+        timeline_data=timeline_data_raw,
+        org_name_map=org_name_map,
+        relation_label_map=relation_label_map,
+    )
+
+    months = timeline_data.get("months", [])
+
+    if not months:
+        st.warning("未找到 timeline_graph_data.json 或其中没有月份数据。请先运行第 11 步。")
+        return
+
+    all_links: List[Dict[str, Any]] = []
+    for m in months:
+        all_links.extend(timeline_data.get("graphs", {}).get(m, {}).get("links", []))
+
+    if not all_links:
+        st.warning("timeline_graph_data.json 中没有关系边数据。")
+        return
+
+    all_relation_types = sorted(set(
+        normalize_relation_type(x.get("relation", ""))
+        for x in all_links
+        if x.get("relation", "")
+    ))
+
+    relation_display = {
+        r: f"{r} - {relation_label(r)}"
+        for r in all_relation_types
+    }
+
+    all_actions = sorted(set(str(x.get("update_action", x.get("status", "keep"))) for x in all_links))
+
+    st.sidebar.subheader("节点演化筛选")
+
+    node_keyword = st.sidebar.text_input(
+        "输入节点名称 / ORG_ID",
+        value="CHINA",
+        help="例如 CHINA、Russia、United States，也可以输入 ORG_000001。",
+    )
+
+    selected_months = st.sidebar.multiselect(
+        "月份",
+        options=months,
+        default=months,
+    )
+
+    selected_relation_display = st.sidebar.multiselect(
+        "关系类型",
+        options=[relation_display[r] for r in all_relation_types],
+        default=[],
+    )
+
+    relation_types = []
+    for item in selected_relation_display:
+        relation_types.append(item.split(" - ")[0].strip())
+
+    actions = st.sidebar.multiselect(
+        "更新动作",
+        options=all_actions,
+        default=[],
+        format_func=lambda x: f"{x} - {action_label(x)}",
+    )
+
+    min_confidence = st.sidebar.slider(
+        "最低关系置信度",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.05,
+    )
+
+    only_triggered = st.sidebar.checkbox("只看触发互斥约束的边", value=False)
+    only_cross_source = st.sidebar.checkbox("只看 ICEWS+GDELT 共同支持关系", value=False)
+    show_edge_label = st.sidebar.checkbox("显示边关系中文标签", value=EDGE_BOOL)
+
+    max_edges_per_month = st.sidebar.slider(
+        "每月最多显示边数",
+        min_value=20,
+        max_value=500,
+        value=120,
+        step=20,
+    )
+
+    if not str(node_keyword).strip():
+        st.info("请输入节点名称或 ORG_ID。")
+        return
+
+    rows = collect_node_evolution_rows(
+        timeline_data=timeline_data,
+        selected_months=selected_months,
+        node_keyword=node_keyword,
+        relation_types=relation_types,
+        actions=actions,
+        min_confidence=min_confidence,
+        only_triggered=only_triggered,
+        only_cross_source=only_cross_source,
+    )
+
+    if rows.empty:
+        st.warning(f"没有找到与 `{node_keyword}` 相关的关系边。可以尝试降低置信度阈值，或输入 ORG_ID。")
+        return
+
+    st.caption(
+        "该页面只展示目标节点的一阶关系边。节点仍使用 ORG_ID 作为图连接字段，显示名称使用真实组织名称。"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("相关关系边数", len(rows))
+    with c2:
+        metric_card("涉及月份数", rows["month"].nunique())
+    with c3:
+        related_nodes = set(rows["source_org_id"].astype(str)) | set(rows["target_org_id"].astype(str))
+        metric_card("关联节点数", len(related_nodes))
+    with c4:
+        metric_card("关系类型数", rows["relation_code"].nunique())
+
+    st.divider()
+
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("月度关系数量")
+        month_counts = rows["month"].value_counts().sort_index().reset_index()
+        month_counts.columns = ["month", "count"]
+        st.bar_chart(month_counts.set_index("month"))
+        st.dataframe(month_counts, use_container_width=True, height=220)
+
+    with right:
+        st.subheader("关系类型分布")
+        relation_counts = rows["relation_label"].value_counts().reset_index()
+        relation_counts.columns = ["relation", "count"]
+        st.bar_chart(relation_counts.set_index("relation"))
+        st.dataframe(relation_counts, use_container_width=True, height=220)
+
+    if "update_action_label" in rows.columns:
+        st.subheader("更新动作分布")
+        action_counts = rows["update_action_label"].value_counts().reset_index()
+        action_counts.columns = ["update_action", "count"]
+        st.bar_chart(action_counts.set_index("update_action"))
+
+    st.divider()
+
+    st.subheader(f"`{node_keyword}` 的关系演化图谱")
+
+    option = build_node_evolution_echarts_option(
+        timeline_data=timeline_data,
+        selected_months=selected_months,
+        node_keyword=node_keyword,
+        relation_types=relation_types,
+        actions=actions,
+        min_confidence=min_confidence,
+        only_triggered=only_triggered,
+        only_cross_source=only_cross_source,
+        show_edge_label=show_edge_label,
+        max_edges_per_month=max_edges_per_month,
+    )
+
+    if HAS_ECHARTS:
+        st_echarts(options=option, height="760px")
+    else:
+        st.warning("未安装 streamlit-echarts，无法展示 ECharts 图。请运行：pip install streamlit-echarts")
+        st.json(option)
+
+    st.subheader("关系边明细")
+    show_cols = [
+        "month",
+        "source_name",
+        "source_org_id",
+        "relation_code",
+        "relation_label",
+        "target_name",
+        "target_org_id",
+        "confidence",
+        "original_confidence",
+        "sources",
+        "status",
+        "update_action_label",
+        "is_mutex_triggered",
+        "triggered_constraint_ids",
+        "triggered_mutex_relations",
+        "update_reason",
+    ]
+    show_cols = [c for c in show_cols if c in rows.columns]
+    rows = rows.sort_values(["month", "confidence"], ascending=[True, False])
+    st.dataframe(rows[show_cols], use_container_width=True, height=620)
+
+
 def page_constraints() -> None:
     st.title("互斥约束列表")
 
@@ -819,6 +1340,7 @@ def main() -> None:
         [
             "总览页",
             "时间轴图谱页",
+            "单节点关系演化页",
             "互斥约束页",
             "冲突列表页",
             "案例页",
@@ -832,6 +1354,8 @@ def main() -> None:
         page_overview()
     elif page == "时间轴图谱页":
         page_timeline_graph()
+    elif page == "单节点关系演化页":
+        page_node_evolution()
     elif page == "互斥约束页":
         page_constraints()
     elif page == "冲突列表页":
