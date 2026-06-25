@@ -16,17 +16,13 @@
    - disabled: 不使用
 6. 输出：
    - relation_edges_after_check.csv
-   - mutual_exclusion_conflicts.csv
+   - mutual_exclusion_conflicts.csv（APP）
+   - detected_conflicts.csv（第12步）
    - update_decisions.csv
-   - mutual_exclusion_constraints_final.csv
+   - mutual_exclusion_constraints_final.csv（APP）
+   - temporal_constraints_final.csv（第12步）
    - timeline_graph_data.json
    - outputs/case_studies/*.csv
-
-运行：
-    python scripts/11_update_graph.py
-
-如果脚本放在项目根目录：
-    python ./11_update_graph.py
 """
 
 import os
@@ -61,11 +57,19 @@ VIOLATION_INSTANCES_IN = os.path.join(PROCESSED_DIR, "mutual_exclusion_violation
 
 DEFAULT_MANUAL_REVIEW_IN = os.path.join(EVAL_DIR, "mutual_exclusion_manual_review.csv")
 
-FINAL_CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_constraints_final.csv")
+# 注意：第 10 步仍然读取/输出 mutual_exclusion_*，但第 12 步与原 APP 读取的是旧版文件名。
+# 因此第 11 步在内部使用新版互斥约束评分结果，最终输出恢复为旧版文件名和字段格式。
+FINAL_CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "temporal_constraints_final.csv")
+LLM_CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "temporal_constraints_llm.csv")
 EDGES_AFTER_OUT = os.path.join(PROCESSED_DIR, "relation_edges_after_check.csv")
-CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_conflicts.csv")
+CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "detected_conflicts.csv")
 DECISIONS_OUT = os.path.join(PROCESSED_DIR, "update_decisions.csv")
 TIMELINE_JSON_OUT = os.path.join(PROCESSED_DIR, "timeline_graph_data.json")
+
+# APP 仍然读取 mutual_exclusion_* 文件名；第 12 步读取 temporal_constraints_final.csv / detected_conflicts.csv。
+# 因此第 11 步必须同时输出两套文件名，且 relation_edges_after_check.csv / timeline_graph_data.json 保持 APP 原有结构。
+APP_FINAL_CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_constraints_final.csv")
+APP_CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_conflicts.csv")
 
 LOG_OUT = os.path.join(LOG_DIR, "11_update_graph.log")
 
@@ -456,6 +460,17 @@ def prepare_edges(edges: pd.DataFrame, cols: Dict[str, str]) -> pd.DataFrame:
     df["_object"] = df[cols["object"]].astype(str)
     df["_relation"] = df[cols["relation"]].apply(normalize_relation_type)
     df["_month"] = df[cols["month"]].apply(normalize_month)
+
+    # 为 APP / timeline_graph_data.json 准备真实名称字段。
+    if cols.get("subject_name"):
+        df["_subject_name"] = df[cols["subject_name"]].astype(str)
+    else:
+        df["_subject_name"] = df["_subject"]
+
+    if cols.get("object_name"):
+        df["_object_name"] = df[cols["object_name"]].astype(str)
+    else:
+        df["_object_name"] = df["_object"]
 
     if cols["confidence"]:
         df["_original_confidence"] = df[cols["confidence"]].apply(lambda x: safe_float(x, 0.0))
@@ -872,6 +887,169 @@ def build_timeline_graph_data(
 
     return data
 
+
+def legacy_check_action(action: Any) -> str:
+    """将新版 update_action 映射为第 12 步和原 APP 使用的 check_action。"""
+    s = str(action or "").strip()
+    mapping = {
+        "keep": "keep",
+        "review": "review",
+        "mark_mixed": "mark_complex",
+        "downgrade": "downgrade",
+        "hide_low_evidence": "hide",
+        "hide": "hide",
+    }
+    return mapping.get(s, s or "keep")
+
+
+def legacy_status(after_check_status: Any, update_action: Any) -> str:
+    """将新版 after_check_status 映射为第 12 步统计使用的 status。"""
+    status = str(after_check_status or "").strip()
+    action = str(update_action or "").strip()
+    if status in {"hidden", "removed"} or action in {"hide", "hide_low_evidence"}:
+        return "hidden"
+    return "active"
+
+
+def legacy_conflict_action(action: Any) -> str:
+    """将新版 conflict_action 映射为 detected_conflicts.csv 中的旧字段 action。"""
+    s = str(action or "").strip()
+    if s in {"hide", "hide_low_evidence"}:
+        return "hide"
+    if s == "mark_mixed":
+        return "mark_complex"
+    if s in {"downgrade", "review", "keep"}:
+        return s
+    return s or "review"
+
+
+def legacy_final_decision(final_status: Any) -> str:
+    """将新版 final_status 映射为 temporal_constraints_final.csv 中的旧版 final_decision。"""
+    s = str(final_status or "").strip()
+    mapping = {
+        "enabled_for_update": "enabled",
+        "enabled_for_mark_mixed": "enabled_mark_complex",
+        "review_only": "review",
+        "disabled": "disabled",
+    }
+    return mapping.get(s, s or "disabled")
+
+
+def relation_label(relation: Any) -> str:
+    r = normalize_relation_type(relation)
+    return RELATION_ZH.get(r, r)
+
+
+def to_legacy_edges_after(edges_after: pd.DataFrame, cols: Dict[str, str]) -> pd.DataFrame:
+    """
+    为第 12 步和原 APP 补齐旧版字段：
+    - status: active / hidden
+    - check_action: keep / review / mark_complex / downgrade / hide
+    - triggered_constraints: 旧版触发约束字段
+    - source_datasets: 若输入只有 sources，则补齐别名
+    同时保留新版字段，方便后续追踪。
+    """
+    df = edges_after.copy()
+
+    if "status" not in df.columns:
+        df["status"] = df.apply(lambda r: legacy_status(r.get("after_check_status", ""), r.get("update_action", "")), axis=1)
+    else:
+        df["status"] = df.apply(lambda r: legacy_status(r.get("after_check_status", r.get("status", "")), r.get("update_action", "")), axis=1)
+
+    df["check_action"] = df.get("update_action", "keep")
+    df["check_action"] = df["check_action"].apply(legacy_check_action)
+
+    df["check_reason"] = df.get("update_reason", "")
+    df["triggered_constraints"] = df.get("triggered_constraint_keys", df.get("triggered_constraint_ids", ""))
+
+    if "source_datasets" not in df.columns:
+        if cols.get("sources") and cols["sources"] in df.columns:
+            df["source_datasets"] = df[cols["sources"]]
+        elif "sources" in df.columns:
+            df["source_datasets"] = df["sources"]
+        else:
+            df["source_datasets"] = ""
+
+    if "confidence" not in df.columns:
+        df["confidence"] = df.get("final_confidence", df.get("original_confidence", 0.0))
+
+    if "relation_type_label" not in df.columns:
+        df["relation_type_label"] = df.get("_relation", df.get("relation_type", "")).apply(relation_label)
+
+    return df
+
+
+def to_legacy_final_constraints(final_constraints: pd.DataFrame) -> pd.DataFrame:
+    """
+    将第 10 步评分结果 + 第 11 步最终状态整理为 12_evaluate.py 期望的
+    temporal_constraints_final.csv 内部格式。
+    """
+    df = final_constraints.copy()
+
+    if "source" not in df.columns:
+        df["source"] = "llm+patecon"
+
+    if "hard_or_soft" not in df.columns:
+        if "llm_hard_or_soft" in df.columns:
+            df["hard_or_soft"] = df["llm_hard_or_soft"]
+        else:
+            df["hard_or_soft"] = "soft"
+
+    df["enabled"] = df.get("is_enabled", False)
+    df["final_decision"] = df.get("final_status", "disabled").apply(legacy_final_decision)
+    df["final_reason"] = df.get("reason", df.get("llm_reason", ""))
+
+    if "reason" not in df.columns:
+        df["reason"] = df["final_reason"]
+
+    if "forbidden_relation" not in df.columns and "forbidden_temporal_relation" in df.columns:
+        df["forbidden_relation"] = df["forbidden_temporal_relation"]
+
+    return df
+
+
+def to_legacy_llm_constraints(scored: pd.DataFrame) -> pd.DataFrame:
+    """
+    第 12 步只需要读取 temporal_constraints_llm.csv 统计数量和抽样。
+    这里从 mutual_exclusion_scored.csv 反向整理出旧版 LLM 约束文件。
+    """
+    df = scored.copy()
+
+    if "source" not in df.columns:
+        df["source"] = "llm"
+
+    if "hard_or_soft" not in df.columns:
+        if "llm_hard_or_soft" in df.columns:
+            df["hard_or_soft"] = df["llm_hard_or_soft"]
+        else:
+            df["hard_or_soft"] = "soft"
+
+    if "expected_action" not in df.columns and "llm_expected_action" in df.columns:
+        df["expected_action"] = df["llm_expected_action"]
+
+    if "reason" not in df.columns and "llm_reason" in df.columns:
+        df["reason"] = df["llm_reason"]
+
+    return df
+
+
+def to_legacy_conflicts(conflicts: pd.DataFrame) -> pd.DataFrame:
+    """
+    将 mutual_exclusion_conflicts 的新版字段整理为 12_evaluate.py 读取的
+    detected_conflicts.csv 内部格式。
+    """
+    df = conflicts.copy()
+
+    if df.empty:
+        return df
+
+    df["action"] = df.get("conflict_action", "review").apply(legacy_conflict_action)
+    df["check_action"] = df["action"]
+    df["triggered_constraints"] = df.get("constraint_key", df.get("constraint_id", ""))
+    df["reason"] = df.get("reason", "")
+
+    return df
+
 def save_case_studies(conflicts: pd.DataFrame, decisions: pd.DataFrame) -> None:
     os.makedirs(CASE_DIR, exist_ok=True)
 
@@ -929,8 +1107,18 @@ def main() -> None:
     manual = load_manual_review(args.manual_review_path)
 
     final_constraints = build_final_constraints(scored, manual)
-    final_constraints.to_csv(FINAL_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
-    log(f"[OK] 已生成最终互斥约束: {FINAL_CONSTRAINTS_OUT}, rows={len(final_constraints)}")
+    legacy_final_constraints = to_legacy_final_constraints(final_constraints)
+    legacy_llm_constraints = to_legacy_llm_constraints(scored)
+
+    legacy_final_constraints.to_csv(FINAL_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
+    legacy_llm_constraints.to_csv(LLM_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
+
+    # APP 需要读取 mutual_exclusion_constraints_final.csv，因此必须保留新版文件名。
+    final_constraints.to_csv(APP_FINAL_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
+
+    log(f"[OK] 已生成旧版最终约束: {FINAL_CONSTRAINTS_OUT}, rows={len(legacy_final_constraints)}")
+    log(f"[OK] 已生成旧版 LLM 约束: {LLM_CONSTRAINTS_OUT}, rows={len(legacy_llm_constraints)}")
+    log(f"[OK] 已生成 APP 互斥约束文件: {APP_FINAL_CONSTRAINTS_OUT}, rows={len(final_constraints)}")
 
     status_counts = final_constraints["final_status"].value_counts(dropna=False).to_dict()
     log(f"[STAT] final_status 分布: {status_counts}")
@@ -942,24 +1130,38 @@ def main() -> None:
         downgrade_factor=args.downgrade_factor,
     )
 
-    edges_after.to_csv(EDGES_AFTER_OUT, index=False, encoding="utf-8-sig")
-    conflicts.to_csv(CONFLICTS_OUT, index=False, encoding="utf-8-sig")
+    legacy_edges_after = to_legacy_edges_after(edges_after, cols)
+    legacy_conflicts = to_legacy_conflicts(conflicts)
+
+    legacy_edges_after.to_csv(EDGES_AFTER_OUT, index=False, encoding="utf-8-sig")
+    legacy_conflicts.to_csv(CONFLICTS_OUT, index=False, encoding="utf-8-sig")
     decisions.to_csv(DECISIONS_OUT, index=False, encoding="utf-8-sig")
 
-    log(f"[OK] 已生成更新后关系边: {EDGES_AFTER_OUT}, rows={len(edges_after)}")
-    log(f"[OK] 已生成互斥冲突表: {CONFLICTS_OUT}, rows={len(conflicts)}")
+    # APP 需要读取 mutual_exclusion_conflicts.csv，因此必须保留新版文件名。
+    conflicts.to_csv(APP_CONFLICTS_OUT, index=False, encoding="utf-8-sig")
+
+    log(f"[OK] 已生成旧版更新后关系边: {EDGES_AFTER_OUT}, rows={len(legacy_edges_after)}")
+    log(f"[OK] 已生成旧版冲突表: {CONFLICTS_OUT}, rows={len(legacy_conflicts)}")
     log(f"[OK] 已生成更新决策表: {DECISIONS_OUT}, rows={len(decisions)}")
+    log(f"[OK] 已生成 APP 互斥冲突文件: {APP_CONFLICTS_OUT}, rows={len(conflicts)}")
 
-    action_counts = edges_after["update_action"].value_counts(dropna=False).to_dict()
-    log(f"[STAT] update_action 分布: {action_counts}")
+    action_counts = legacy_edges_after["check_action"].value_counts(dropna=False).to_dict()
+    status_counts = legacy_edges_after["status"].value_counts(dropna=False).to_dict()
+    log(f"[STAT] check_action 分布: {action_counts}")
+    log(f"[STAT] status 分布: {status_counts}")
 
-    build_timeline_graph_data(
+    # timeline_graph_data.json 是 APP 图谱页的核心输入，使用包含 _subject/_object/_month 的完整边表生成，
+    # 保证 source/target 仍为 ORG_ID，node.name 显示真实名称。
+    timeline_data = build_timeline_graph_data(
         edges_after=edges_after,
         cols=cols,
         out_path=TIMELINE_JSON_OUT,
         max_edges_per_month=args.max_edges_per_month,
     )
+    total_timeline_nodes = sum(len(g.get("nodes", [])) for g in timeline_data.get("graphs", {}).values())
+    total_timeline_links = sum(len(g.get("links", [])) for g in timeline_data.get("graphs", {}).values())
     log(f"[OK] 已生成时间轴图谱数据: {TIMELINE_JSON_OUT}")
+    log(f"[STAT] timeline months={len(timeline_data.get('months', []))}, nodes={total_timeline_nodes}, links={total_timeline_links}")
 
     save_case_studies(conflicts, decisions)
     log(f"[OK] 已生成案例文件目录: {CASE_DIR}")

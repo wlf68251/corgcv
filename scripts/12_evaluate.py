@@ -5,8 +5,6 @@
 12_evaluate.py
 
 说明：
-    本脚本严格保持原 12_evaluate.py 的输入文件、输出文件名称和输出结构不变。
-
     修改目的：
         适配 cameotop 分支中 relation_type = 01~20 的 CAMEO 顶层码。
 

@@ -93,3 +93,52 @@
 [2026-06-10 15:40:25] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
 [2026-06-10 15:40:25] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
 [2026-06-10 15:40:25] ========== 第 09 步完成 ==========
+[2026-06-23 17:28:44] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-23 17:28:45] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-23 17:28:45] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-23 17:28:46] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-23 17:29:05] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-23 17:29:05] [OK] 已生成候选互斥关系对池: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/candidate_mutex_pair_pool_for_llm.csv, rows=51
+[2026-06-23 17:29:05] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-23 17:29:05] [INFO] --parse_existing 模式，读取已有 LLM 输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt
+[2026-06-23 17:29:05] [OK] 已保存/读取 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=6958
+[2026-06-23 17:29:05] [STAT] LLM raw candidates: 10
+[2026-06-23 17:29:05] [STAT] kept candidates: 10
+[2026-06-23 17:29:05] [STAT] filtered candidates: 0
+[2026-06-23 17:29:05] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-23 17:29:05] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-23 17:29:05] ========== 第 09 步完成 ==========
+[2026-06-25 23:56:02] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-25 23:56:02] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-25 23:56:03] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-25 23:56:03] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-25 23:56:20] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-25 23:56:20] [OK] 已生成候选互斥关系对池: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/candidate_mutex_pair_pool_for_llm.csv, rows=51
+[2026-06-25 23:56:20] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-25 23:56:20] [WARN] --parse_existing 模式但未找到: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt
+[2026-06-25 23:56:20] [OK] 已保存/读取 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=0
+[2026-06-25 23:56:20] [STAT] LLM raw candidates: 0
+[2026-06-25 23:56:20] [STAT] kept candidates: 0
+[2026-06-25 23:56:20] [STAT] filtered candidates: 0
+[2026-06-25 23:56:20] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-25 23:56:20] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-25 23:56:20] [WARN] 没有保留下来的候选互斥约束。
+[2026-06-25 23:56:20] [WARN] 如果使用 --no_llm，这是正常的。
+[2026-06-25 23:56:20] [WARN] 如果已调用 LLM，请检查 raw_response 是否为合法 JSON 数组，或检查候选池是否过窄。
+[2026-06-25 23:56:20] [WARN] 可尝试降低 --min_pair_comparable，或增大 --max_candidate_pairs_in_prompt。
+[2026-06-25 23:56:20] ========== 第 09 步完成 ==========
+[2026-06-26 00:05:02] ========== 第 09 步：生成 LLM 候选互斥约束 ==========
+[2026-06-26 00:05:02] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-26 00:05:04] [OK] 已生成关系类型清单: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_inventory_for_llm.csv, rows=20
+[2026-06-26 00:05:04] [OK] 已生成关系样例: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_examples_for_llm.csv, rows=100
+[2026-06-26 00:05:20] [OK] 已生成关系对时间共现摘要: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_pair_temporal_summary_for_llm.csv, rows=189
+[2026-06-26 00:05:21] [OK] 已生成候选互斥关系对池: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/candidate_mutex_pair_pool_for_llm.csv, rows=51
+[2026-06-26 00:05:21] [OK] 已生成互斥约束 prompt: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_prompt.txt
+[2026-06-26 00:05:21] [INFO] --parse_existing 模式，读取已有 LLM 输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt
+[2026-06-26 00:05:21] [OK] 已保存/读取 LLM 原始输出: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_raw_response.txt, length=6958
+[2026-06-26 00:05:21] [STAT] LLM raw candidates: 10
+[2026-06-26 00:05:21] [STAT] kept candidates: 10
+[2026-06-26 00:05:21] [STAT] filtered candidates: 0
+[2026-06-26 00:05:21] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.json
+[2026-06-26 00:05:21] [OK] 已生成: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv
+[2026-06-26 00:05:21] ========== 第 09 步完成 ==========

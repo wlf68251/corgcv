@@ -58,7 +58,7 @@ PROCESSED_DIR = "../data/processed"
 ORGANIZATIONS_IN = os.path.join(PROCESSED_DIR, "organizations_raw.csv")
 ORGANIZATIONS_OUT = os.path.join(PROCESSED_DIR, "organizations.csv")
 ALIASES_OUT = os.path.join(PROCESSED_DIR, "organization_aliases.csv")
-ENABLE_FUZZY_MERGE = True
+ENABLE_FUZZY_MERGE = False
 
 try:
     from rapidfuzz import fuzz
