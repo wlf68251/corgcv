@@ -1,0 +1,10 @@
+[2026-06-29 04:04:23] ========== 导出候选约束质量明细表 ==========
+[2026-06-29 04:04:24] [OK] 读取约束文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-29 04:04:24] [OK] 读取冲突文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/detected_conflicts.csv, rows=9108
+[2026-06-29 04:04:25] [OK] 读取更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-29 04:07:26] ========== 导出候选约束质量明细表 ==========
+[2026-06-29 04:07:26] [OK] 读取约束文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-29 04:07:26] [OK] 读取冲突文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/detected_conflicts.csv, rows=9108
+[2026-06-29 04:07:28] [OK] 读取更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-29 04:07:28] [OK] 已输出 CSV: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_constraint_quality_detail.csv
+[2026-06-29 04:07:28] [OK] 已输出 Markdown: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_constraint_quality_detail.md

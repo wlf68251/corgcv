@@ -147,3 +147,45 @@
 [2026-06-26 03:20:30] [STAT] timeline months=4, nodes=503, links=1600
 [2026-06-26 03:20:30] [OK] 已生成案例文件目录: /mnt/c/Users/onlyif/Desktop/new/project/outputs/case_studies
 [2026-06-26 03:20:30] ========== 第 11 步完成 ==========
+[2026-06-26 18:31:10] ========== 第 11 步：根据最终互斥约束更新派生关系边 ==========
+[2026-06-26 18:31:12] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-26 18:31:12] [OK] 读取互斥约束评分: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_scored.csv, rows=10
+[2026-06-26 18:31:12] [INFO] 未找到人工复核表，使用自动规则生成最终约束: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/mutual_exclusion_manual_review.csv
+[2026-06-26 18:31:12] [OK] 已生成旧版最终约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_final.csv, rows=10
+[2026-06-26 18:31:12] [OK] 已生成旧版 LLM 约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_llm.csv, rows=10
+[2026-06-26 18:31:12] [OK] 已生成新版互斥约束副本: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-26 18:31:12] [STAT] final_status 分布: {'review_only': 8, 'enabled_for_mark_mixed': 2}
+[2026-06-28 22:25:27] ========== 第 11 步：根据最终互斥约束更新派生关系边 ==========
+[2026-06-28 22:25:28] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-28 22:25:28] [OK] 读取互斥约束评分: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_scored.csv, rows=10
+[2026-06-28 22:25:28] [INFO] 未找到人工复核表，使用自动规则生成最终约束: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/mutual_exclusion_manual_review.csv
+[2026-06-28 22:25:28] [OK] 已生成旧版最终约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_final.csv, rows=10
+[2026-06-28 22:25:28] [OK] 已生成旧版 LLM 约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_llm.csv, rows=10
+[2026-06-28 22:25:28] [OK] 已生成新版互斥约束副本: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-28 22:25:28] [STAT] final_status 分布: {'review_only': 8, 'enabled_for_mark_mixed': 2}
+[2026-06-28 22:26:36] [OK] 已生成旧版更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-28 22:26:36] [OK] 已生成旧版冲突表: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/detected_conflicts.csv, rows=9108
+[2026-06-28 22:26:36] [OK] 已生成更新决策表: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/update_decisions.csv, rows=18216
+[2026-06-28 22:26:36] [OK] 已生成新版互斥冲突副本: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_conflicts.csv, rows=9108
+[2026-06-28 22:26:36] [STAT] check_action 分布: {'keep': 138112, 'review': 11909, 'mark_complex': 1536}
+[2026-06-28 22:26:36] [STAT] status 分布: {'active': 151557}
+[2026-06-28 22:26:36] [OK] 已生成时间轴图谱数据: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/timeline_graph_data.json
+[2026-06-28 22:26:36] [OK] 已生成案例文件目录: /mnt/c/Users/onlyif/Desktop/new/project/outputs/case_studies
+[2026-06-28 22:26:36] ========== 第 11 步完成 ==========
+[2026-06-28 22:52:42] ========== 第 11 步：根据最终互斥约束更新派生关系边 ==========
+[2026-06-28 22:52:42] [OK] 读取关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_scored.csv, rows=151557
+[2026-06-28 22:52:42] [OK] 读取互斥约束评分: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_scored.csv, rows=10
+[2026-06-28 22:52:42] [INFO] 未找到人工复核表，使用自动规则生成最终约束: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/mutual_exclusion_manual_review.csv
+[2026-06-28 22:52:42] [OK] 已生成旧版最终约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_final.csv, rows=10
+[2026-06-28 22:52:42] [OK] 已生成旧版 LLM 约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/temporal_constraints_llm.csv, rows=10
+[2026-06-28 22:52:42] [OK] 已生成新版互斥约束副本: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-28 22:52:42] [STAT] final_status 分布: {'review_only': 8, 'enabled_for_mark_mixed': 2}
+[2026-06-28 22:53:53] [OK] 已生成旧版更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-28 22:53:53] [OK] 已生成旧版冲突表: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/detected_conflicts.csv, rows=9108
+[2026-06-28 22:53:53] [OK] 已生成更新决策表: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/update_decisions.csv, rows=18216
+[2026-06-28 22:53:53] [OK] 已生成新版互斥冲突副本: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_conflicts.csv, rows=9108
+[2026-06-28 22:53:53] [STAT] check_action 分布: {'keep': 138112, 'review': 11909, 'mark_complex': 1536}
+[2026-06-28 22:53:53] [STAT] status 分布: {'active': 151557}
+[2026-06-28 22:54:09] [OK] 已生成时间轴图谱数据: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/timeline_graph_data.json
+[2026-06-28 22:54:09] [OK] 已生成案例文件目录: /mnt/c/Users/onlyif/Desktop/new/project/outputs/case_studies
+[2026-06-28 22:54:09] ========== 第 11 步完成 ==========

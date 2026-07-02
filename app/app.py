@@ -19,11 +19,12 @@
 5. 保持 ECharts 连接字段 source / target 仍然使用 ORG_ID，避免图谱消失。
 
 运行：
-    streamlit run app/app.py
+    streamlit run ./app.py
 """
 
 import os
 import json
+import heapq
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
@@ -157,10 +158,72 @@ def safe_float(x: Any, default: float = 0.0) -> float:
     try:
         if pd.isna(x):
             return default
-        return float(x)
+        v = float(x)
+        if pd.isna(v) or v == float("inf") or v == float("-inf"):
+            return default
+        return v
     except Exception:
         return default
 
+
+def safe_str(x: Any, default: str = "") -> str:
+    """把 None/NaN/inf 等异常值转为前端安全字符串。"""
+    try:
+        if x is None or pd.isna(x):
+            return default
+    except Exception:
+        pass
+
+    s = str(x).strip()
+    if s.lower() in {"nan", "none", "null", "inf", "-inf"}:
+        return default
+    return s
+
+
+def normalize_node_id(x: Any) -> str:
+    """统一清洗节点 ID，避免 link.source/target 与 node.id 因空格或 NaN 不匹配。"""
+    return safe_str(x, "")
+
+
+def get_confidence_value(link: Dict[str, Any], default: float = 0.0) -> float:
+    """兼容 confidence / final_confidence 两种字段。"""
+    return safe_float(link.get("confidence", link.get("final_confidence", default)), default)
+
+
+def get_sources_value(link: Dict[str, Any]) -> str:
+    """兼容 sources / source_datasets 两种字段。"""
+    return safe_str(link.get("sources", link.get("source_datasets", "")), "")
+
+
+def clean_for_echarts(obj: Any) -> Any:
+    """
+    递归清理 ECharts option 中不适合前端 JSON 渲染的值。
+    重点处理 NaN、inf、None 等异常值，避免前端空白。
+    """
+    if obj is None:
+        return ""
+
+    if isinstance(obj, float):
+        if pd.isna(obj) or obj == float("inf") or obj == float("-inf"):
+            return 0
+        return obj
+
+    if isinstance(obj, (int, bool, str)):
+        return obj
+
+    if isinstance(obj, dict):
+        return {str(k): clean_for_echarts(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        return [clean_for_echarts(x) for x in obj]
+
+    try:
+        if pd.isna(obj):
+            return ""
+    except Exception:
+        pass
+
+    return obj
 
 def metric_card(label: str, value: Any) -> None:
     st.metric(label, value)
@@ -282,21 +345,42 @@ def filter_links(
     keyword: str,
 ) -> List[Dict[str, Any]]:
     result = []
-    kw = str(keyword or "").strip().lower()
+    kw = safe_str(keyword, "").lower()
 
-    for link in links:
-        relation = normalize_relation_type(link.get("relation", ""))
-        relation_zh = str(link.get("relation_label", relation_label(relation)))
+    for raw_link in links:
+        link = dict(raw_link)
 
-        action = str(link.get("update_action", link.get("status", "keep")))
-        action_zh = str(link.get("update_action_label", action_label(action)))
+        relation = normalize_relation_type(link.get("relation", link.get("relation_code", "")))
+        relation_zh = safe_str(link.get("relation_label", relation_label(relation)), relation_label(relation))
 
-        conf = safe_float(link.get("confidence", 0.0), 0.0)
+        action = safe_str(link.get("update_action", link.get("status", "keep")), "keep")
+        action_zh = safe_str(link.get("update_action_label", action_label(action)), action_label(action))
+
+        conf = get_confidence_value(link, 0.0)
         triggered = bool(link.get("is_mutex_triggered", False))
-        sources = str(link.get("sources", "")).upper()
+        sources = get_sources_value(link).upper()
 
-        source_name = str(link.get("source_name", link.get("source", "")))
-        target_name = str(link.get("target_name", link.get("target", "")))
+        source_id = normalize_node_id(link.get("source", link.get("source_org_id", "")))
+        target_id = normalize_node_id(link.get("target", link.get("target_org_id", "")))
+        source_name = safe_str(link.get("source_name", source_id), source_id)
+        target_name = safe_str(link.get("target_name", target_id), target_id)
+
+        if not source_id or not target_id:
+            continue
+
+        link["source"] = source_id
+        link["target"] = target_id
+        link["source_org_id"] = safe_str(link.get("source_org_id", source_id), source_id)
+        link["target_org_id"] = safe_str(link.get("target_org_id", target_id), target_id)
+        link["source_name"] = source_name
+        link["target_name"] = target_name
+        link["relation"] = relation
+        link["relation_code"] = relation
+        link["relation_label"] = relation_zh
+        link["confidence"] = conf
+        link["sources"] = get_sources_value(link)
+        link["update_action"] = action
+        link["update_action_label"] = action_zh
 
         if relation_types and relation not in relation_types:
             continue
@@ -317,8 +401,8 @@ def filter_links(
             searchable = " ".join([
                 source_name,
                 target_name,
-                str(link.get("source_org_id", "")),
-                str(link.get("target_org_id", "")),
+                link["source_org_id"],
+                link["target_org_id"],
                 relation,
                 relation_zh,
                 action,
@@ -332,7 +416,6 @@ def filter_links(
 
     return result
 
-
 def build_echarts_option(
     timeline_data: Dict[str, Any],
     selected_months: List[str],
@@ -343,8 +426,17 @@ def build_echarts_option(
     only_cross_source: bool,
     keyword: str,
     show_edge_label: bool,
+    max_edges_per_month: int,
 ) -> Dict[str, Any]:
-    
+    """
+    构建“时间轴图谱页”的 ECharts option。
+
+    这一版专门修复全局时间轴图谱空白的问题：
+    1. 每月限制边数，避免 force 布局被全量图拖死；
+    2. 不再把原始节点字段 **n 全量传给 ECharts，只保留必要字段；
+    3. 统一清洗 source/target/node.id；
+    4. 兼容 confidence/final_confidence 与 sources/source_datasets。
+    """
     all_months = timeline_data.get("months", [])
     graphs = timeline_data.get("graphs", {})
 
@@ -364,71 +456,107 @@ def build_echarts_option(
             keyword=keyword,
         )
 
+        # 只取前 N 条，不完整排序全部边，减少耗时。
+        links = heapq.nlargest(
+            max_edges_per_month,
+            links,
+            key=lambda x: safe_float(
+                x.get("confidence", x.get("final_confidence", 0.0)),
+                0.0
+            ),
+        )
+
         node_ids = set()
         for link in links:
-            node_ids.add(str(link.get("source", "")))
-            node_ids.add(str(link.get("target", "")))
+            source_id = normalize_node_id(link.get("source", link.get("source_org_id", "")))
+            target_id = normalize_node_id(link.get("target", link.get("target_org_id", "")))
+            if not source_id or not target_id:
+                continue
+            link["source"] = source_id
+            link["target"] = target_id
+            node_ids.add(source_id)
+            node_ids.add(target_id)
 
         nodes = []
-        for n in graph.get("nodes", []):
-            if str(n.get("id", "")) in node_ids:
-                display_name = str(n.get("name", n.get("id", "")))
+        for raw_node in graph.get("nodes", []):
+            node_id = normalize_node_id(raw_node.get("id", raw_node.get("org_id", "")))
+            if not node_id or node_id not in node_ids:
+                continue
 
-                nodes.append({
-                    **n,
-                    "label": {
-                        "show": True,
-                        "formatter": display_name,
-                        "fontSize": 10,
-                    },
-                    "tooltip": {
-                        "formatter": (
-                            f"组织名称：{display_name}<br/>"
-                            f"组织ID：{n.get('org_id', n.get('id', ''))}<br/>"
-                            f"连接数：{n.get('value', '')}"
-                        )
-                    },
-                })
+            display_name = safe_str(raw_node.get("name", node_id), node_id)
+            org_id = normalize_node_id(raw_node.get("org_id", node_id))
+            node_value = safe_float(raw_node.get("value", 1), 1)
 
+            nodes.append({
+                "id": node_id,
+                "name": display_name,
+                "org_id": org_id,
+                "value": node_value,
+                "symbolSize": 24,
+                "category": "organization",
+                "label": {
+                    "show": True,
+                    "formatter": display_name,
+                    "fontSize": 10,
+                },
+                "tooltip": {
+                    "formatter": (
+                        f"组织名称：{display_name}<br/>"
+                        f"组织ID：{org_id}<br/>"
+                        f"连接数：{node_value}"
+                    )
+                },
+            })
+
+        valid_node_ids = {n["id"] for n in nodes}
         formatted_links = []
 
         for link in links:
-            status = str(link.get("status", "keep"))
-            action = str(link.get("update_action", status))
+            source_id = normalize_node_id(link.get("source", link.get("source_org_id", "")))
+            target_id = normalize_node_id(link.get("target", link.get("target_org_id", "")))
+            if source_id not in valid_node_ids or target_id not in valid_node_ids:
+                continue
+
+            status = safe_str(link.get("status", "keep"), "keep")
+            action = safe_str(link.get("update_action", status), status)
             color = STATUS_COLORS.get(status, STATUS_COLORS.get(action, "#607d8b"))
 
-            relation_code = normalize_relation_type(link.get("relation", ""))
-            relation_zh = str(link.get("relation_label", relation_label(relation_code)))
+            relation_code = normalize_relation_type(link.get("relation", link.get("relation_code", "")))
+            relation_zh = safe_str(link.get("relation_label", relation_label(relation_code)), relation_label(relation_code))
 
-            source_name = str(link.get("source_name", link.get("source", "")))
-            target_name = str(link.get("target_name", link.get("target", "")))
+            source_name = safe_str(link.get("source_name", source_id), source_id)
+            target_name = safe_str(link.get("target_name", target_id), target_id)
+            conf_value = get_confidence_value(link, 0.0)
+            sources_text = get_sources_value(link)
+            is_triggered = bool(link.get("is_mutex_triggered", False))
 
             tooltip = (
+                f"月份：{month}<br/>"
                 f"主体：{source_name}<br/>"
-                f"主体ID：{link.get('source_org_id', link.get('source', ''))}<br/>"
+                f"主体ID：{safe_str(link.get('source_org_id', source_id), source_id)}<br/>"
                 f"客体：{target_name}<br/>"
-                f"客体ID：{link.get('target_org_id', link.get('target', ''))}<br/>"
+                f"客体ID：{safe_str(link.get('target_org_id', target_id), target_id)}<br/>"
                 f"关系：{relation_zh}<br/>"
                 f"关系码：{relation_code}<br/>"
-                f"置信度：{link.get('confidence', '')}<br/>"
-                f"原始置信度：{link.get('original_confidence', '')}<br/>"
-                f"来源：{link.get('sources', '')}<br/>"
+                f"置信度：{conf_value}<br/>"
+                f"原始置信度：{safe_str(link.get('original_confidence', ''), '')}<br/>"
+                f"来源：{sources_text}<br/>"
                 f"状态：{status}<br/>"
-                f"动作：{link.get('update_action_label', action_label(action))}<br/>"
-                f"触发约束：{link.get('triggered_constraint_ids', '')}<br/>"
-                f"触发互斥关系：{link.get('triggered_mutex_relations', '')}<br/>"
-                f"原因：{link.get('update_reason', '')}"
+                f"动作：{safe_str(link.get('update_action_label', action_label(action)), action_label(action))}<br/>"
+                f"触发约束：{safe_str(link.get('triggered_constraint_ids', ''), '')}<br/>"
+                f"触发互斥关系：{safe_str(link.get('triggered_mutex_relations', ''), '')}<br/>"
+                f"原因：{safe_str(link.get('update_reason', ''), '')}"
             )
 
             formatted_links.append({
-                "source": link.get("source", ""),
-                "target": link.get("target", ""),
+                "source": source_id,
+                "target": target_id,
                 "name": relation_zh,
-                "value": link.get("confidence", 0),
+                "value": conf_value,
                 "tooltip": {"formatter": tooltip},
                 "lineStyle": {
                     "color": color,
-                    "width": 2.8 if link.get("is_mutex_triggered", False) else 1.2,
+                    "width": 2.8 if is_triggered else 1.2,
                     "opacity": 0.85,
                     "curveness": 0.15,
                 },
@@ -441,7 +569,7 @@ def build_echarts_option(
 
         options.append({
             "title": {
-                "text": f"{month} 组织关系图谱",
+                "text": f"{month} 组织关系图谱（节点：{len(nodes)}，边：{len(formatted_links)}）",
                 "left": "center",
             },
             "series": [{
@@ -495,8 +623,7 @@ def build_echarts_option(
         "options": options,
     }
 
-    return option
-
+    return clean_for_echarts(option)
 
 def filter_node_links(
     links: List[Dict[str, Any]],
@@ -893,10 +1020,14 @@ def page_timeline_graph() -> None:
     for m in months:
         all_links.extend(timeline_data.get("graphs", {}).get(m, {}).get("links", []))
 
+    if not all_links:
+        st.warning("timeline_graph_data.json 中没有关系边数据。")
+        return
+
     all_relation_types = sorted(set(
-        normalize_relation_type(x.get("relation", ""))
+        normalize_relation_type(x.get("relation", x.get("relation_code", "")))
         for x in all_links
-        if x.get("relation", "")
+        if x.get("relation", x.get("relation_code", ""))
     ))
 
     relation_display = {
@@ -904,7 +1035,7 @@ def page_timeline_graph() -> None:
         for r in all_relation_types
     }
 
-    all_actions = sorted(set(str(x.get("update_action", x.get("status", "keep"))) for x in all_links))
+    all_actions = sorted(set(safe_str(x.get("update_action", x.get("status", "keep")), "keep") for x in all_links))
 
     st.sidebar.subheader("图谱筛选")
 
@@ -943,14 +1074,33 @@ def page_timeline_graph() -> None:
     only_cross_source = st.sidebar.checkbox("只看 ICEWS+GDELT 共同支持关系", value=False)
     show_edge_label = st.sidebar.checkbox("显示边关系中文标签", value=EDGE_BOOL)
 
+    max_edges_per_month = st.sidebar.slider(
+        "每月最多显示边数",
+        min_value=10,
+        max_value=1000,
+        value=400,
+        step=10,
+    )
+
     keyword = st.sidebar.text_input(
         "搜索组织名称 / ORG_ID / 关系",
         value="",
     )
 
+    debug_single_month = st.sidebar.checkbox(
+        "调试：只显示第一个月份，不使用时间轴",
+        value=False,
+    )
+
+    show_debug_table = st.sidebar.checkbox(
+        "显示图谱调试表",
+        value=True,
+    )
+
     st.caption(
         "节点显示真实名称；边显示中文关系含义。"
         "颜色含义：keep=绿色，downgraded=橙色，hidden=灰色，mark_mixed=紫色，review=红色。"
+        "如果全局时间轴不显示，可勾选“调试：只显示第一个月份”。"
     )
 
     option = build_echarts_option(
@@ -963,10 +1113,39 @@ def page_timeline_graph() -> None:
         only_cross_source=only_cross_source,
         keyword=keyword,
         show_edge_label=show_edge_label,
+        max_edges_per_month=max_edges_per_month,
     )
 
+    debug_options = option.get("options", [])
+    debug_months = selected_months if selected_months else months
+    debug_rows = []
+    for i, opt in enumerate(debug_options):
+        month_name = debug_months[i] if i < len(debug_months) else str(i)
+        series = opt.get("series", [{}])[0]
+        debug_rows.append({
+            "month": month_name,
+            "nodes": len(series.get("data", [])),
+            "links": len(series.get("links", [])),
+        })
+
+    if show_debug_table:
+        st.subheader("时间轴图谱调试信息")
+        st.dataframe(pd.DataFrame(debug_rows), use_container_width=True, height=180)
+
     if HAS_ECHARTS:
-        st_echarts(options=option, height="760px")
+        if debug_single_month:
+            first_option = debug_options[0] if debug_options else {}
+            st_echarts(
+                options=first_option,
+                height="760px",
+                key="timeline_graph_single_month_debug",
+            )
+        else:
+            st_echarts(
+                options=option,
+                height="760px",
+                key="timeline_graph_main",
+            )
     else:
         st.warning("未安装 streamlit-echarts，无法展示 ECharts 图。请运行：pip install streamlit-echarts")
         st.json(option)
@@ -980,9 +1159,10 @@ def page_timeline_graph() -> None:
         "only_triggered": only_triggered,
         "only_cross_source": only_cross_source,
         "show_edge_label": show_edge_label,
+        "max_edges_per_month": max_edges_per_month,
         "keyword": keyword,
+        "debug_single_month": debug_single_month,
     })
-
 
 def page_node_evolution() -> None:
     st.title("单节点关系演化图谱")
@@ -1157,8 +1337,14 @@ def page_node_evolution() -> None:
         max_edges_per_month=max_edges_per_month,
     )
 
+    option = clean_for_echarts(option)
+
     if HAS_ECHARTS:
-        st_echarts(options=option, height="760px")
+        st_echarts(
+            options=option,
+            height="760px",
+            key="node_evolution_graph",
+        )
     else:
         st.warning("未安装 streamlit-echarts，无法展示 ECharts 图。请运行：pip install streamlit-echarts")
         st.json(option)

@@ -1,0 +1,9 @@
+﻿方法,动作,数量,占比
+LLM-only,filtered,6060,4.00%
+LLM-only,keep,145497,96.00%
+NoConstraint,keep,151557,100.00%
+PaTeCon-Direct,filtered,44396,29.29%
+PaTeCon-Direct,keep,107161,70.71%
+SSTC-Fusion,keep,138112,91.13%
+SSTC-Fusion,mark_mixed,1536,1.01%
+SSTC-Fusion,review,11909,7.86%

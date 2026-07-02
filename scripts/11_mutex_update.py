@@ -16,11 +16,9 @@
    - disabled: 不使用
 6. 输出：
    - relation_edges_after_check.csv
-   - mutual_exclusion_conflicts.csv（APP）
-   - detected_conflicts.csv（第12步）
+   - mutual_exclusion_conflicts.csv
    - update_decisions.csv
-   - mutual_exclusion_constraints_final.csv（APP）
-   - temporal_constraints_final.csv（第12步）
+   - mutual_exclusion_constraints_final.csv
    - timeline_graph_data.json
    - outputs/case_studies/*.csv
 """
@@ -66,10 +64,9 @@ CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "detected_conflicts.csv")
 DECISIONS_OUT = os.path.join(PROCESSED_DIR, "update_decisions.csv")
 TIMELINE_JSON_OUT = os.path.join(PROCESSED_DIR, "timeline_graph_data.json")
 
-# APP 仍然读取 mutual_exclusion_* 文件名；第 12 步读取 temporal_constraints_final.csv / detected_conflicts.csv。
-# 因此第 11 步必须同时输出两套文件名，且 relation_edges_after_check.csv / timeline_graph_data.json 保持 APP 原有结构。
-APP_FINAL_CONSTRAINTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_constraints_final.csv")
-APP_CONFLICTS_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_conflicts.csv")
+# 兼容新版调试文件名：保留副本，不影响第 12 步和 APP。
+MUTEX_FINAL_CONSTRAINTS_COPY_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_constraints_final.csv")
+MUTEX_CONFLICTS_COPY_OUT = os.path.join(PROCESSED_DIR, "mutual_exclusion_conflicts.csv")
 
 LOG_OUT = os.path.join(LOG_DIR, "11_update_graph.log")
 
@@ -783,8 +780,8 @@ def build_timeline_graph_data(
         # 不要先按筛选删边，只限制数量
         if "final_confidence" in g.columns:
             g = g.sort_values(
-                ["is_mutex_triggered", "final_confidence"],
-                ascending=[False, False],
+                ["final_confidence"],
+                ascending=[False],
             )
 
         if max_edges_per_month and len(g) > max_edges_per_month:
@@ -1090,7 +1087,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manual_review_path", type=str, default=DEFAULT_MANUAL_REVIEW_IN)
     parser.add_argument("--downgrade_factor", type=float, default=0.8)
-    parser.add_argument("--max_edges_per_month", type=int, default=400)
+    parser.add_argument("--max_edges_per_month", type=int, default=0)
     args = parser.parse_args()
 
     ensure_dirs()
@@ -1113,12 +1110,12 @@ def main() -> None:
     legacy_final_constraints.to_csv(FINAL_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
     legacy_llm_constraints.to_csv(LLM_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
 
-    # APP 需要读取 mutual_exclusion_constraints_final.csv，因此必须保留新版文件名。
-    final_constraints.to_csv(APP_FINAL_CONSTRAINTS_OUT, index=False, encoding="utf-8-sig")
+    # 保留新版文件名副本，便于调试；第 12 步和 APP 不依赖这些副本。
+    final_constraints.to_csv(MUTEX_FINAL_CONSTRAINTS_COPY_OUT, index=False, encoding="utf-8-sig")
 
     log(f"[OK] 已生成旧版最终约束: {FINAL_CONSTRAINTS_OUT}, rows={len(legacy_final_constraints)}")
     log(f"[OK] 已生成旧版 LLM 约束: {LLM_CONSTRAINTS_OUT}, rows={len(legacy_llm_constraints)}")
-    log(f"[OK] 已生成 APP 互斥约束文件: {APP_FINAL_CONSTRAINTS_OUT}, rows={len(final_constraints)}")
+    log(f"[OK] 已生成新版互斥约束副本: {MUTEX_FINAL_CONSTRAINTS_COPY_OUT}, rows={len(final_constraints)}")
 
     status_counts = final_constraints["final_status"].value_counts(dropna=False).to_dict()
     log(f"[STAT] final_status 分布: {status_counts}")
@@ -1137,31 +1134,26 @@ def main() -> None:
     legacy_conflicts.to_csv(CONFLICTS_OUT, index=False, encoding="utf-8-sig")
     decisions.to_csv(DECISIONS_OUT, index=False, encoding="utf-8-sig")
 
-    # APP 需要读取 mutual_exclusion_conflicts.csv，因此必须保留新版文件名。
-    conflicts.to_csv(APP_CONFLICTS_OUT, index=False, encoding="utf-8-sig")
+    # 保留新版冲突副本，便于调试；第 12 步和 APP 不依赖这个副本。
+    conflicts.to_csv(MUTEX_CONFLICTS_COPY_OUT, index=False, encoding="utf-8-sig")
 
     log(f"[OK] 已生成旧版更新后关系边: {EDGES_AFTER_OUT}, rows={len(legacy_edges_after)}")
     log(f"[OK] 已生成旧版冲突表: {CONFLICTS_OUT}, rows={len(legacy_conflicts)}")
     log(f"[OK] 已生成更新决策表: {DECISIONS_OUT}, rows={len(decisions)}")
-    log(f"[OK] 已生成 APP 互斥冲突文件: {APP_CONFLICTS_OUT}, rows={len(conflicts)}")
+    log(f"[OK] 已生成新版互斥冲突副本: {MUTEX_CONFLICTS_COPY_OUT}, rows={len(conflicts)}")
 
     action_counts = legacy_edges_after["check_action"].value_counts(dropna=False).to_dict()
     status_counts = legacy_edges_after["status"].value_counts(dropna=False).to_dict()
     log(f"[STAT] check_action 分布: {action_counts}")
     log(f"[STAT] status 分布: {status_counts}")
 
-    # timeline_graph_data.json 是 APP 图谱页的核心输入，使用包含 _subject/_object/_month 的完整边表生成，
-    # 保证 source/target 仍为 ORG_ID，node.name 显示真实名称。
-    timeline_data = build_timeline_graph_data(
-        edges_after=edges_after,
+    build_timeline_graph_data(
+        edges_after=legacy_edges_after,
         cols=cols,
         out_path=TIMELINE_JSON_OUT,
         max_edges_per_month=args.max_edges_per_month,
     )
-    total_timeline_nodes = sum(len(g.get("nodes", [])) for g in timeline_data.get("graphs", {}).values())
-    total_timeline_links = sum(len(g.get("links", [])) for g in timeline_data.get("graphs", {}).values())
     log(f"[OK] 已生成时间轴图谱数据: {TIMELINE_JSON_OUT}")
-    log(f"[STAT] timeline months={len(timeline_data.get('months', []))}, nodes={total_timeline_nodes}, links={total_timeline_links}")
 
     save_case_studies(conflicts, decisions)
     log(f"[OK] 已生成案例文件目录: {CASE_DIR}")

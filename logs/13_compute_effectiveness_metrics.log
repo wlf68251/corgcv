@@ -1,0 +1,8 @@
+[2026-06-28 06:12:30] ========== 计算第六章方法有效性指标 ==========
+[2026-06-28 06:12:30] [INFO] Project root: /mnt/c/Users/onlyif/Desktop/new/project
+[2026-06-28 06:12:32] [OK] 读取关系边文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-28 06:12:32] [OK] 读取冲突记录文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/detected_conflicts.csv, rows=9108
+[2026-06-28 06:12:33] [OK] 读取互斥约束文件: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_constraints_final.csv, rows=10
+[2026-06-28 06:12:33] [OK] 已输出约束状态分布表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_constraint_status_stats.csv
+[2026-06-28 06:12:33] [OK] 已输出方法有效性指标表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_effectiveness_metrics.csv
+[2026-06-28 06:12:33] [OK] 已输出证据分组动作分布表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_evidence_group_actions.csv

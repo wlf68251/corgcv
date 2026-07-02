@@ -1,0 +1,26 @@
+[2026-06-28 06:22:06] ========== 对比方法指标统计 ==========
+[2026-06-28 06:22:06] [INFO] Project root: /mnt/c/Users/onlyif/Desktop/new/project
+[2026-06-28 06:22:06] [OK] 读取校验前关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_before_check.csv, rows=151557
+[2026-06-28 06:22:07] [OK] 读取 LLM 候选约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv, rows=10
+[2026-06-28 06:22:07] [STAT] LLM-only 使用候选互斥关系对数量: 10
+[2026-06-28 06:22:07] [STAT] LLM-only 关系对: [('03', '11'), ('04', '11'), ('04', '17'), ('04', '19'), ('05', '11'), ('05', '19'), ('06', '19'), ('07', '19'), ('08', '17'), ('08', '19')]
+[2026-06-28 06:43:17] ========== 对比方法指标统计 ==========
+[2026-06-28 06:43:17] [INFO] Project root: /mnt/c/Users/onlyif/Desktop/new/project
+[2026-06-28 06:43:18] [OK] 读取校验前关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_before_check.csv, rows=151557
+[2026-06-28 06:43:18] [OK] 读取 LLM 候选约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv, rows=10
+[2026-06-28 06:43:18] [STAT] LLM-only 使用候选互斥关系对数量: 10
+[2026-06-28 06:43:18] [STAT] LLM-only 关系对: [('03', '11'), ('04', '11'), ('04', '17'), ('04', '19'), ('05', '11'), ('05', '19'), ('06', '19'), ('07', '19'), ('08', '17'), ('08', '19')]
+[2026-06-28 06:43:20] [OK] 读取 SSTC-Fusion 更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-28 06:43:24] [OK] 已输出方法对比指标表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_comparison_metrics.csv
+[2026-06-28 06:43:24] [OK] 已输出方法动作分布表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_action_distribution.csv
+[2026-06-28 06:43:24] [OK] 已输出证据分组动作表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_evidence_group_actions.csv
+[2026-06-28 06:49:20] ========== 对比方法指标统计 ==========
+[2026-06-28 06:49:20] [INFO] Project root: /mnt/c/Users/onlyif/Desktop/new/project
+[2026-06-28 06:49:20] [OK] 读取校验前关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_before_check.csv, rows=151557
+[2026-06-28 06:49:21] [OK] 读取 LLM 候选约束: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/mutual_exclusion_llm_candidates.csv, rows=10
+[2026-06-28 06:49:21] [STAT] LLM-only 使用候选互斥关系对数量: 10
+[2026-06-28 06:49:21] [STAT] LLM-only 关系对: [('03', '11'), ('04', '11'), ('04', '17'), ('04', '19'), ('05', '11'), ('05', '19'), ('06', '19'), ('07', '19'), ('08', '17'), ('08', '19')]
+[2026-06-28 06:49:23] [OK] 读取 SSTC-Fusion 更新后关系边: /mnt/c/Users/onlyif/Desktop/new/project/data/processed/relation_edges_after_check.csv, rows=151557
+[2026-06-28 06:49:26] [OK] 已输出方法对比指标表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_comparison_metrics.csv
+[2026-06-28 06:49:26] [OK] 已输出方法动作分布表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_action_distribution.csv
+[2026-06-28 06:49:26] [OK] 已输出证据分组动作表: /mnt/c/Users/onlyif/Desktop/new/project/outputs/evaluation_tables/table_6_x_method_evidence_group_actions.csv
